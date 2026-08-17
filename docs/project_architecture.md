@@ -1,12 +1,8 @@
-# Production-Ready Go/Gin GraphQL-First Project Architecture
+# Production-Ready Go/Chi GraphQL-First Project Architecture
 
-This document defines the architecture for a production Go API that keeps the existing
-Gin + Uber Fx + GORM + SQLite + Goose + Zap foundation, but makes **GraphQL the primary
-application API**.
+Architecture for production Go API. Replaces original Gin HTTP layer with **Chi + standard `net/http`**, keeps Uber Fx + GORM + SQLite + Goose + Zap. **GraphQL primary application API**.
 
-The architecture remains inspired by Apache Answer's strong package boundaries and
-layering, while replacing the REST/controller-centric transport model with a
-**schema-first GraphQL transport using gqlgen**.
+Inspired by Apache Answer's package boundaries and layering, but swaps REST/controller transport for **schema-first GraphQL transport using gqlgen**.
 
 ---
 
@@ -15,7 +11,8 @@ layering, while replacing the REST/controller-centric transport model with a
 | Concern | Decision |
 | --- | --- |
 | Language | Go |
-| HTTP framework | Gin |
+| HTTP router | Chi (`github.com/go-chi/chi/v5`) |
+| HTTP abstraction | Standard `net/http` (`http.Handler`, `http.HandlerFunc`, `http.Server`) |
 | Primary API | GraphQL |
 | GraphQL implementation | gqlgen |
 | GraphQL style | Schema-first |
@@ -31,16 +28,16 @@ layering, while replacing the REST/controller-centric transport model with a
 | Persistence models | `internal/entity` |
 | Application code | `internal/` |
 | Public reusable code | `pkg/` only when genuinely reusable |
-| Health endpoints | REST-style Gin endpoints |
+| Health endpoints | Standard `net/http` handlers routed by Chi |
 | GraphQL subscriptions | Not enabled initially |
 
-The selected stack is therefore:
+Stack:
 
 ```text
 Client
   |
   v
-Gin
+net/http + Chi
   |
   v
 gqlgen GraphQL handler
@@ -64,29 +61,40 @@ GORM
 SQLite
 ```
 
+### Why Chi is the HTTP boundary
+
+Chi = thin router over stdlib. App treats `http.Handler` as HTTP contract, Chi as routing/composition impl.
+
+Gives three wins:
+
+1. gqlgen mounts direct — server already `http.Handler`;
+2. middleware stays ordinary `func(http.Handler) http.Handler`;
+3. server, router, GraphQL handler, middleware testable solo with `httptest`.
+
+No app-wide wrapper around `chi.Router`. Business code shouldn't know which router used.
+
 ---
 
 ## 2. Architecture goals
 
-The project should make it easy to:
+Should make easy:
 
-- treat GraphQL as the primary public API contract;
-- understand the full path of a GraphQL operation;
-- keep business logic independent of Gin, gqlgen, GORM, and SQLite;
-- construct the application through explicit Uber Fx modules;
+- GraphQL as primary public API contract;
+- trace full path of GraphQL operation;
+- business logic independent of Chi, gqlgen, GORM, SQLite;
+- build app through explicit Uber Fx modules;
 - keep GraphQL schema/types separate from persistence entities;
-- test services without starting Gin, gqlgen, Fx, or a database;
-- test repositories against a real SQLite database;
-- avoid GraphQL N+1 query problems;
-- apply authentication consistently to GraphQL operations;
-- expose stable GraphQL error codes without leaking internal errors;
+- test services w/o starting Chi, gqlgen, Fx, DB;
+- test repositories against real SQLite;
+- avoid GraphQL N+1;
+- consistent auth across GraphQL ops;
+- stable GraphQL error codes, no internal-error leaks;
 - limit expensive GraphQL queries;
-- replace SQLite later without rewriting business logic;
-- add background jobs, caching, tracing, or subscriptions later without collapsing package boundaries;
-- shut down cleanly and predictably.
+- swap SQLite later w/o business-logic rewrite;
+- add jobs/caching/tracing/subscriptions later w/o breaking boundaries;
+- clean predictable shutdown.
 
-The architecture should remain small. GraphQL infrastructure should be introduced only
-when it has an explicit responsibility.
+Stay small. Add GraphQL infra only when explicit responsibility exists.
 
 ---
 
@@ -98,7 +106,7 @@ Dependencies point toward business logic.
 GraphQL Client
       |
       v
-Gin HTTP Middleware
+Chi + net/http Middleware
       |
       v
 gqlgen Handler
@@ -122,11 +130,12 @@ GORM
 SQLite
 ```
 
-The normal application request path is:
+Normal request path:
 
 ```text
 POST /graphql
-    -> Gin middleware
+    -> http.Server
+    -> Chi middleware chain
     -> gqlgen operation execution
     -> resolver
     -> service
@@ -135,11 +144,11 @@ POST /graphql
     -> SQLite
 ```
 
-For nested relation fields:
+Nested relation fields:
 
 ```text
 GraphQL field resolver
-    -> DataLoader
+    -> request-scoped DataLoader
     -> repository/service
     -> GORM
     -> SQLite
@@ -147,19 +156,21 @@ GraphQL field resolver
 
 ### Dependency rules
 
-1. GraphQL resolvers may depend on application services.
-2. Resolvers use `context.Context`, not `*gin.Context`.
-3. Services use `context.Context` and never depend on gqlgen or Gin.
-4. Services own business rules, authorization decisions, orchestration, and transaction boundaries.
-5. Repositories own persistence queries and GORM-specific behavior.
-6. Services do not import GORM.
-7. Persistence entities do not define the GraphQL contract.
-8. GraphQL generated types must not become the persistence model by default.
-9. Lower layers must not import Gin, gqlgen handlers, GraphQL resolvers, or transport-specific code.
-10. Fx is a composition/lifecycle concern, not a business-logic dependency.
-11. Zap is the single application logger.
-12. Resource authorization must not be implemented only in GraphQL directives or middleware.
-13. DataLoader batching is a transport optimization, not a place for business rules.
+1. Resolvers may depend on services.
+2. Resolvers use `context.Context`; no dependency on Chi router types or `*http.Request`.
+3. Services use `context.Context`, never depend on gqlgen, Chi, HTTP transport types.
+4. Services own business rules, authz decisions, orchestration, transaction boundaries.
+5. Repositories own persistence queries + GORM-specific behavior.
+6. Services don't import GORM.
+7. Persistence entities don't define GraphQL contract.
+8. GraphQL generated types must not become persistence model by default.
+9. Lower layers must not import Chi, gqlgen handlers, GraphQL resolvers, `net/http`, or transport code.
+10. Fx = composition/lifecycle concern, not business dependency.
+11. Zap = single app logger.
+12. Resource authz must not live only in GraphQL directives or middleware.
+13. DataLoader batching = transport optimization, not place for business rules.
+14. Router-specific values must not become service args; convert request metadata to typed context values at HTTP boundary.
+15. Router constructor returns `http.Handler` unless caller genuinely needs concrete `chi.Router`.
 
 ---
 
@@ -190,20 +201,29 @@ GraphQL field resolver
 │   │   └── module.go
 │   │
 │   ├── server/
-│   │   ├── http.go
+│   │   ├── server.go
+│   │   ├── lifecycle.go
 │   │   └── module.go
 │   │
 │   ├── router/
 │   │   ├── router.go
+│   │   ├── health.go
 │   │   └── module.go
 │   │
 │   ├── middleware/
 │   │   ├── request_id.go
 │   │   ├── recovery.go
-│   │   ├── logging.go
+│   │   ├── access_log.go
 │   │   ├── security_headers.go
+│   │   ├── body_limit.go
+│   │   ├── client_ip.go
 │   │   ├── auth.go
 │   │   └── module.go
+│   │
+│   ├── requestctx/
+│   │   ├── actor.go
+│   │   ├── request_id.go
+│   │   └── client_ip.go
 │   │
 │   ├── graphql/
 │   │   ├── schema/
@@ -289,50 +309,45 @@ GraphQL field resolver
 
 ### Directory guidance
 
-`internal/graphql` owns the GraphQL transport.
+`internal/router` intentionally small. Composes routes + route-scoped middleware; no business handlers or app rules.
 
-It contains:
+`internal/server` owns concrete `http.Server`, lifecycle hooks, listening, graceful shutdown. Separate from router → both easier to test, keeps network lifecycle out of route construction.
 
-- SDL schema files;
-- gqlgen-generated execution code;
-- GraphQL generated API models;
-- resolvers;
-- GraphQL directives;
-- custom scalar mappings;
-- DataLoader integration;
-- GraphQL error presentation;
-- gqlgen server construction.
+`internal/middleware` = HTTP-only cross-cutting behavior, standard middleware signature:
 
-It must not contain application business logic.
+```go
+type Middleware func(http.Handler) http.Handler
+```
 
-`internal/service` remains the use-case layer.
+`internal/requestctx` = typed request-context accessors shared by HTTP middleware + GraphQL resolvers. Must not import Chi.
 
-`internal/repository` remains the persistence boundary.
+`internal/graphql` owns GraphQL transport: SDL schema files, gqlgen-generated exec code, GraphQL API models, resolvers, directives, custom scalars, DataLoader integration, GraphQL error presentation, gqlgen server construction. No app business logic.
 
-`internal/entity` remains the GORM persistence model layer.
+`internal/service` = use-case layer. `internal/repository` = persistence boundary. `internal/entity` = GORM persistence model layer.
+
+Skip generic dumping-ground packages (`utils`, `helpers`, `common`). Build packages around concrete responsibility.
 
 ---
 
 ## 5. Why GraphQL is not placed in `controller/`
 
-The REST architecture used:
+REST architecture used:
 
 ```text
 controller -> service -> repository
 ```
 
-The GraphQL-first architecture uses:
+GraphQL-first architecture uses:
 
 ```text
 resolver -> service -> repository
 ```
 
-A GraphQL resolver performs the transport role that a REST controller previously
-performed.
+Resolver plays transport role REST controller played before.
 
-Therefore the default project should **remove `internal/controller` for the primary API**.
+So default project should **remove `internal/controller` for primary API**.
 
-Do not create this:
+Don't do this:
 
 ```text
 GraphQL resolver
@@ -340,7 +355,7 @@ GraphQL resolver
     -> service
 ```
 
-That introduces an unnecessary transport-to-transport layer.
+Unnecessary transport-to-transport layer.
 
 Use:
 
@@ -349,8 +364,7 @@ GraphQL resolver
     -> service
 ```
 
-REST controllers/handlers may still exist later for transport-specific endpoints that
-are genuinely not GraphQL concerns, such as:
+REST controllers/handlers may still exist for transport-specific endpoints genuinely not GraphQL concerns:
 
 ```text
 GET /health/live
@@ -361,7 +375,7 @@ GET /health/ready
 
 ## 6. GraphQL schema is the API contract
 
-The GraphQL schema is the primary public API contract.
+GraphQL schema = primary public API contract.
 
 Example:
 
@@ -414,24 +428,24 @@ type Mutation {
 
 ### Schema rules
 
-1. Organize schema by domain/feature instead of keeping a single huge schema file.
+1. Organize by domain/feature, not one huge schema file.
 2. Prefer explicit input types for mutations.
-3. Avoid accepting persistence entities as GraphQL inputs.
-4. Avoid exposing internal database fields just because they exist.
-5. Keep names stable once consumed by clients.
-6. Prefer deprecation over sudden field removal.
-7. Do not use GraphQL types as an excuse to bypass service-level validation.
+3. Don't accept persistence entities as GraphQL inputs.
+4. Don't expose internal DB fields just cuz they exist.
+5. Keep names stable once clients consume them.
+6. Deprecate, don't sudden-remove fields.
+7. Don't use GraphQL types to bypass service-level validation.
 8. Keep pagination conventions consistent across list fields.
-9. Avoid exposing unbounded list fields.
+9. Don't expose unbounded list fields.
 10. Document nullable vs non-null semantics deliberately.
 
 ---
 
 ## 7. `gqlgen.yml`
 
-Keep gqlgen configuration at the repository root.
+Keep gqlgen config at repo root.
 
-Conceptual configuration:
+Conceptual config:
 
 ```yaml
 schema:
@@ -457,9 +471,9 @@ models:
       - github.com/99designs/gqlgen/graphql.ID
 ```
 
-Generated files should be treated as generated code.
+Treat generated files as generated code.
 
-Do not hand-edit generated execution code.
+Don't hand-edit generated exec code.
 
 Recommended commands:
 
@@ -472,22 +486,22 @@ graphql-check:
 	git diff --exit-code
 ```
 
-CI should ensure generated GraphQL code is up to date.
+CI should ensure generated GraphQL code current.
 
 ---
 
 ## 8. Resolver responsibilities
 
-Resolvers are thin GraphQL adapters.
+Resolvers = thin GraphQL adapters.
 
-A resolver should normally:
+Should normally:
 
 1. accept gqlgen-provided `context.Context`;
 2. read already-established actor identity from context;
 3. map GraphQL input into service input;
 4. call one application service/use case;
 5. map service output into GraphQL output when required;
-6. return stable application errors for centralized GraphQL error presentation.
+6. return stable app errors for centralized GraphQL error presentation.
 
 Example:
 
@@ -521,15 +535,14 @@ Resolvers must not:
 - contain workflow orchestration;
 - know SQLite details;
 - log every error independently;
-- depend directly on `*gin.Context`;
+- depend directly on `*http.Request` or Chi router details;
 - return raw GORM errors.
 
 ---
 
 ## 9. Resolver root
 
-Use one resolver root object to hold service dependencies required by generated
-resolvers.
+Use one resolver root object to hold service deps needed by generated resolvers.
 
 Example:
 
@@ -554,79 +567,124 @@ func New(
 }
 ```
 
-Do not place mutable request state in the resolver root.
-
-Request-specific state belongs in `context.Context`.
+No mutable request state in resolver root. Request-specific state belongs in `context.Context`.
 
 ---
 
-## 10. Gin's role in a GraphQL-first application
+## 10. Chi's role in a GraphQL-first application
 
-Gin remains the HTTP server/router layer.
+Chi = HTTP routing + middleware-composition layer. Keep thin.
 
-Gin owns:
+Chi owns/composes:
 
-- HTTP server integration;
-- request ID middleware;
-- recovery middleware;
+- route matching;
+- standard `net/http` middleware;
+- request ID creation/propagation;
+- panic recovery at HTTP boundary;
 - security headers;
 - CORS;
-- broad authentication extraction;
-- body-size limits;
+- trusted client-IP extraction when required;
+- broad auth extraction;
+- request-body limits;
 - access logging;
 - health routes;
-- mounting the gqlgen handler.
+- mounting gqlgen handler.
 
-Gin does **not** own GraphQL field resolution.
+Chi does **not** own GraphQL field resolution, business validation, resource authz, transactions, or persistence.
 
 Recommended routes:
 
 ```text
-POST /graphql      -> GraphQL operations
-GET  /graphql      -> GraphQL playground in development only
+POST /graphql       -> GraphQL operations
+GET  /playground    -> development-only GraphQL playground
 GET  /health/live
 GET  /health/ready
 ```
 
-A production router should conceptually look like:
+Prefer separate `/playground` route over overloading `GET /graphql` — keeps prod GraphQL endpoint contract simple, dev UI easy to disable.
+
+### Router constructor
+
+Router should expose stdlib abstraction:
 
 ```go
 func NewRouter(
     gqlHandler http.Handler,
     authMiddleware *middleware.Auth,
-) *gin.Engine {
-    engine := gin.New()
+    cfg config.Config,
+) http.Handler {
+    r := chi.NewRouter()
 
-    engine.Use(
-        middleware.RequestID(),
-        middleware.Recovery(),
-        middleware.SecurityHeaders(),
-        middleware.AccessLog(),
-        middleware.BodyLimit(),
-        middleware.CORS(),
-        authMiddleware.Optional(),
-    )
+    // Global middleware. All r.Use calls happen before routes are registered.
+    r.Use(chimiddleware.RequestID)
+    r.Use(middleware.Recover())
+    r.Use(middleware.SecurityHeaders())
+    r.Use(middleware.AccessLog())
+    r.Use(middleware.BodyLimit(cfg.HTTP.MaxBodyBytes))
+    r.Use(middleware.CORS(cfg.CORS))
+    r.Use(authMiddleware.Optional())
 
-    engine.POST("/graphql", gin.WrapH(gqlHandler))
+    r.Method(http.MethodPost, "/graphql", gqlHandler)
 
-    engine.GET("/health/live", liveHandler)
-    engine.GET("/health/ready", readyHandler)
+    r.Get("/health/live", liveHandler)
+    r.Get("/health/ready", readyHandler)
 
-    return engine
+    if cfg.Environment == "development" {
+        r.Handle("/playground", playground.Handler(
+            "GraphQL Playground",
+            "/graphql",
+        ))
+    }
+
+    return r
 }
 ```
 
-Authentication middleware should usually be able to establish an optional actor because
-the same GraphQL endpoint may contain both public and authenticated operations.
+Important boundary:
 
-Field/use-case authorization still occurs deeper in the application.
+```text
+router implementation: chi.Router
+public constructor result: http.Handler
+server dependency:      http.Handler
+```
+
+Don't pass `chi.Router` into services or repositories.
+
+### Route grouping
+
+Use `Route`, `Group`, `With` only when middleware genuinely applies to route subset. Keep main GraphQL endpoint free of route-level authz — one endpoint may run both public and authenticated ops.
+
+Example for future non-GraphQL admin endpoints:
+
+```go
+r.Route("/internal", func(r chi.Router) {
+    r.Use(adminOnly)
+    r.Get("/metrics", metricsHandler)
+})
+```
+
+### Standard-library compatibility rule
+
+App-owned middleware should use standard `net/http` signatures even when mounted via Chi:
+
+```go
+func SecurityHeaders() func(http.Handler) http.Handler {
+    return func(next http.Handler) http.Handler {
+        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+            // set headers
+            next.ServeHTTP(w, r)
+        })
+    }
+}
+```
+
+Minimizes router lock-in, allows direct middleware tests with `httptest`.
 
 ---
 
 ## 11. Authentication flow
 
-GraphQL uses a single primary HTTP endpoint, so route-level authorization is less useful
-than in REST.
+GraphQL uses single primary HTTP endpoint — route-level authz less useful than REST.
 
 Recommended flow:
 
@@ -634,13 +692,16 @@ Recommended flow:
 Authorization header / cookie
         |
         v
-Gin auth middleware
+net/http authentication middleware
         |
         v
 validate credential
         |
         v
 actor stored in request context
+        |
+        v
+Chi
         |
         v
 gqlgen
@@ -652,7 +713,7 @@ resolver
 service-level authorization
 ```
 
-### Rule
+Auth middleware should normally establish **optional actor**, not reject every anonymous `/graphql` request. Public query + authenticated mutation share same endpoint.
 
 Authentication answers:
 
@@ -660,30 +721,23 @@ Authentication answers:
 Who is calling?
 ```
 
-Service authorization answers:
+Service authz answers:
 
 ```text
 May this actor perform this use case on this resource?
 ```
 
-Do not rely only on a GraphQL directive such as:
+Don't rely only on GraphQL directive like `@auth` for resource-level authz. Directive enforces broad reqs ("must be logged in"); service owns domain authz.
 
-```graphql
-@auth
-```
-
-for resource-level authorization.
-
-A directive may enforce broad requirements such as "must be logged in", while the
-service remains responsible for domain authorization.
+Keep context key + accessor impl outside router package — resolvers shouldn't need Chi import.
 
 ---
 
 ## 12. Context propagation
 
-The Go request context is the request-scoped carrier.
+Go request context = request-scoped carrier.
 
-Use it for:
+Use for:
 
 - cancellation;
 - deadlines;
@@ -692,8 +746,7 @@ Use it for:
 - tracing context;
 - DataLoader registry.
 
-Do not use context for arbitrary business parameters that should be explicit function
-arguments.
+Don't stuff arbitrary business params into context that should be explicit func args.
 
 Example actor accessor:
 
@@ -710,27 +763,25 @@ func ActorFromContext(ctx context.Context) (Actor, bool) {
 }
 ```
 
-Services should receive actor/resource identifiers explicitly where that improves
-testability and business clarity.
+Services should receive actor/resource IDs explicitly where it improves testability + clarity.
 
 ---
 
 ## 13. Services
 
-Services implement application use cases.
+Services implement app use cases.
 
-They own:
+Own:
 
 - business invariants;
-- authorization decisions;
+- authz decisions;
 - orchestration across repositories;
 - transaction boundaries;
-- interaction with external services;
-- domain/application validation;
-- stable application errors.
+- interaction w/ external services;
+- domain/app validation;
+- stable app errors.
 
-Prefer service-owned input/output types rather than passing generated GraphQL models deep
-into the business layer.
+Prefer service-owned input/output types over passing generated GraphQL models deep into business layer.
 
 Example:
 
@@ -754,20 +805,19 @@ type Service interface {
 }
 ```
 
-This preserves:
+Preserves:
 
 ```text
 GraphQL transport model != application model != persistence model
 ```
 
-For a tiny feature, application DTOs may be lightweight, but the dependency direction
-must remain the same.
+Tiny feature → app DTOs may be lightweight, but dependency direction stays same.
 
 ---
 
 ## 14. Repository layer
 
-GORM belongs in repository and database packages.
+GORM belongs in repository + database packages.
 
 Good dependency direction:
 
@@ -833,7 +883,7 @@ Repositories own:
 - batch queries used by DataLoaders;
 - constraint/error translation.
 
-Repositories do not own:
+Repositories don't own:
 
 - GraphQL schema behavior;
 - GraphQL error codes;
@@ -844,7 +894,7 @@ Repositories do not own:
 
 ## 15. Persistence entities
 
-Entities represent persisted/core database state.
+Entities = persisted/core DB state.
 
 Example:
 
@@ -864,13 +914,13 @@ Entities must not contain:
 - gqlgen resolver logic;
 - GraphQL directives;
 - GraphQL descriptions;
-- Gin bindings;
+- router-specific bindings;
 - HTTP status codes;
 - transport-only presentation fields.
 
-Do not automatically bind GraphQL types directly to GORM entities merely to reduce code.
+Don't auto-bind GraphQL types direct to GORM entities just to save code.
 
-That shortcut strongly couples the public GraphQL contract to database design.
+That shortcut tightly couples public GraphQL contract to DB design.
 
 ---
 
@@ -894,19 +944,18 @@ Service Result
 GraphQL Model
 ```
 
-Not every feature requires a separate struct at every arrow.
+Not every feature needs separate struct at every arrow.
 
-The architectural rule is about **ownership and dependency**, not mechanical DTO
-proliferation.
+Architectural rule about **ownership and dependency**, not mechanical DTO proliferation.
 
-Create a mapping when:
+Create mapping when:
 
-- the GraphQL field shape differs from persistence;
-- IDs require conversion;
+- GraphQL field shape differs from persistence;
+- IDs need conversion;
 - GraphQL enum names differ from stored values;
 - internal fields must not be exposed;
 - derived/computed fields exist;
-- mutation inputs do not match entity structure.
+- mutation inputs don't match entity structure.
 
 ---
 
@@ -934,7 +983,7 @@ Example response:
 }
 ```
 
-Recommended application-to-GraphQL mapping:
+Recommended app-to-GraphQL mapping:
 
 | Application error | GraphQL `extensions.code` |
 | --- | --- |
@@ -949,16 +998,16 @@ Recommended application-to-GraphQL mapping:
 
 ### Error rules
 
-- application errors remain independent from GraphQL;
-- map errors at the GraphQL boundary;
+- app errors stay independent from GraphQL;
+- map errors at GraphQL boundary;
 - never expose raw GORM errors;
 - never expose raw SQLite errors;
 - never expose stack traces;
 - never expose filesystem paths or secrets;
-- unexpected errors should return a safe public message;
-- log unexpected errors once with request/operation context.
+- unexpected errors return safe public message;
+- log unexpected errors once w/ request/operation context.
 
-Use a centralized gqlgen error presenter.
+Use centralized gqlgen error presenter.
 
 Conceptually:
 
@@ -968,13 +1017,13 @@ srv.SetErrorPresenter(func(ctx context.Context, err error) *gqlerror.Error {
 })
 ```
 
-Use a centralized recovery function for unexpected panics.
+Use centralized recovery func for unexpected panics.
 
 ---
 
 ## 18. GraphQL HTTP status behavior
 
-Do not recreate the REST response-envelope architecture inside GraphQL.
+Don't recreate REST response-envelope architecture inside GraphQL.
 
 GraphQL responses naturally use:
 
@@ -985,10 +1034,9 @@ GraphQL responses naturally use:
 }
 ```
 
-A successfully parsed/executed GraphQL HTTP request may contain GraphQL errors while the
-HTTP layer itself remains successful.
+Successfully parsed/executed GraphQL HTTP request may contain GraphQL errors while HTTP layer stays successful.
 
-Therefore:
+So:
 
 ```text
 HTTP status
@@ -998,7 +1046,7 @@ GraphQL errors[]
     -> operation/field/application condition
 ```
 
-Do not force application errors into REST-style envelopes such as:
+Don't force app errors into REST-style envelopes like:
 
 ```json
 {
@@ -1013,7 +1061,7 @@ inside GraphQL.
 
 ## 19. DataLoader and N+1 prevention
 
-GraphQL makes it easy to create N+1 database queries.
+GraphQL makes N+1 DB queries easy to create.
 
 Example schema:
 
@@ -1023,7 +1071,7 @@ type Task {
 }
 ```
 
-A naive owner resolver can execute one user query per task.
+Naive owner resolver can fire one user query per task.
 
 Avoid:
 
@@ -1035,8 +1083,7 @@ owner field task 3: 1 query
 ...
 ```
 
-Use request-scoped DataLoaders for relation fields where batching materially reduces
-queries.
+Use request-scoped DataLoaders for relation fields where batching materially cuts queries.
 
 Desired behavior:
 
@@ -1048,12 +1095,12 @@ users by owner IDs:   1 batched query
 ### DataLoader rules
 
 1. DataLoaders are request-scoped.
-2. Do not keep a global DataLoader cache across users/requests.
-3. Batch repository methods should accept `context.Context`.
+2. No global DataLoader cache across users/requests.
+3. Batch repo methods should accept `context.Context`.
 4. DataLoader keys must preserve requested ordering.
-5. Authorization must not be bypassed by batching.
-6. DataLoaders optimize retrieval; they do not own business rules.
-7. Do not introduce a loader for every field automatically.
+5. Authz must not be bypassed by batching.
+6. DataLoaders optimize retrieval; don't own business rules.
+7. Don't add loader for every field automatically.
 
 Example repository API:
 
@@ -1065,7 +1112,7 @@ GetByIDs(ctx context.Context, ids []uint) ([]*entity.User, error)
 
 ## 20. Pagination
 
-Never expose unbounded production list fields.
+Never expose unbounded prod list fields.
 
 Avoid:
 
@@ -1090,7 +1137,7 @@ default page size: 20
 maximum page size: 100
 ```
 
-The exact limits should be configurable or centrally defined.
+Exact limits should be configurable or centrally defined.
 
 Prefer cursor pagination for public GraphQL APIs where list stability matters.
 
@@ -1108,24 +1155,24 @@ type PageInfo {
 }
 ```
 
-Cursor internals should be treated as opaque by clients.
+Treat cursor internals as opaque to clients.
 
 ---
 
 ## 21. Query complexity and abuse controls
 
-A GraphQL endpoint should not allow arbitrarily expensive operations.
+GraphQL endpoint shouldn't allow arbitrarily expensive ops.
 
-Production controls should include:
+Prod controls should include:
 
-- maximum request body size;
+- max request body size;
 - GraphQL operation complexity limit;
 - pagination limits;
-- authentication-aware rate limits;
+- auth-aware rate limits;
 - timeouts/cancellation;
 - bounded resolver work;
 - DataLoader batching;
-- limits on expensive search/filter operations.
+- limits on expensive search/filter ops.
 
 Example conceptual server setup:
 
@@ -1142,16 +1189,15 @@ srv.Use(extension.Introspection{})
 srv.Use(extension.FixedComplexityLimit(250))
 ```
 
-The complexity value must be tuned from actual schema/workload behavior rather than
-treated as universal.
+Tune complexity value from actual schema/workload behavior, not treat as universal.
 
-For production, introspection policy should be an explicit product/security decision.
+Prod introspection policy should be explicit product/security decision.
 
 ---
 
 ## 22. GraphQL directives
 
-Directives are appropriate for cross-cutting GraphQL behavior.
+Directives fit cross-cutting GraphQL behavior.
 
 Examples:
 
@@ -1162,12 +1208,12 @@ directive @hasRole(role: Role!) on FIELD_DEFINITION
 
 Potential uses:
 
-- broad authentication requirements;
+- broad auth requirements;
 - broad role requirements;
 - field-level metadata;
 - declarative transport concerns.
 
-Do not place complicated domain authorization into directives.
+Don't put complicated domain authz into directives.
 
 Avoid:
 
@@ -1192,7 +1238,7 @@ service
 
 ## 23. Custom scalars
 
-Use custom scalars only when they improve the API contract.
+Use custom scalars only when they improve API contract.
 
 Common examples:
 
@@ -1201,9 +1247,7 @@ scalar DateTime
 scalar UUID
 ```
 
-Scalar code owns transport parsing/serialization.
-
-It must not contain database logic.
+Scalar code owns transport parsing/serialization. No DB logic.
 
 Example DateTime mapping responsibility:
 
@@ -1213,7 +1257,7 @@ GraphQL string
 time.Time
 ```
 
-Keep custom scalar implementations in:
+Keep custom scalar impls in:
 
 ```text
 internal/graphql/scalar
@@ -1223,10 +1267,9 @@ internal/graphql/scalar
 
 ## 24. Transactions
 
-The service layer owns transaction boundaries because it understands the complete use
-case.
+Service layer owns transaction boundaries — it knows full use case.
 
-Do not start transactions in resolvers.
+Don't start transactions in resolvers.
 
 Preferred abstraction:
 
@@ -1251,21 +1294,21 @@ err := txManager.WithinTransaction(ctx, func(txCtx context.Context) error {
 })
 ```
 
-This keeps GORM transaction objects out of resolver and service APIs.
+Keeps GORM transaction objects out of resolver/service APIs.
 
 ---
 
 ## 25. SQLite strategy
 
-SQLite remains the primary database.
+SQLite = primary DB.
 
-Recommended development path:
+Recommended dev path:
 
 ```text
 ./data/app.db
 ```
 
-Recommended production mounted path:
+Recommended prod mounted path:
 
 ```text
 /data/app.db
@@ -1289,7 +1332,7 @@ PRAGMA foreign_keys=ON;
 
 ### Busy timeout
 
-Start with a bounded configurable value, for example:
+Start w/ bounded configurable value, e.g.:
 
 ```text
 5 seconds
@@ -1297,16 +1340,16 @@ Start with a bounded configurable value, for example:
 
 ### Connection pool
 
-Use conservative values appropriate for SQLite:
+Use conservative values for SQLite:
 
 ```text
 MaxOpenConns: small
 MaxIdleConns: small
 ```
 
-Measure before increasing write concurrency.
+Measure before raising write concurrency.
 
-The existing deployment constraint remains:
+Existing deployment constraint remains:
 
 ```text
 prefer one application instance
@@ -1314,21 +1357,21 @@ prefer one application instance
 persistent local/attached storage
 ```
 
-Do not treat a shared SQLite file as a horizontally scaled multi-writer database.
+Don't treat shared SQLite file as horizontally-scaled multi-writer DB.
 
 ---
 
 ## 26. GORM rules
 
-GORM remains confined to database/repository code.
+GORM stays confined to database/repository code.
 
-Every repository operation should propagate context:
+Every repo op should propagate context:
 
 ```go
 db.WithContext(ctx)
 ```
 
-Persistence errors should be translated into stable application errors:
+Translate persistence errors into stable app errors:
 
 ```text
 record not found
@@ -1350,7 +1393,7 @@ Raw GORM/SQLite errors must never reach GraphQL clients.
 
 ## 27. Goose migrations
 
-Goose remains the official database migration system.
+Goose = official DB migration system.
 
 ```text
 GORM models
@@ -1360,7 +1403,7 @@ Goose SQL migrations
     -> schema history and deployment changes
 ```
 
-Do not use GORM `AutoMigrate` as the production migration mechanism.
+Don't use GORM `AutoMigrate` as prod migration mechanism.
 
 Migration layout:
 
@@ -1434,7 +1477,7 @@ graphql.Module
 ├── dataloader.Module
 ├── directive providers
 ├── GraphQL executable schema
-└── GraphQL handler
+└── GraphQL handler (http.Handler)
 ```
 
 Application graph:
@@ -1443,7 +1486,8 @@ Application graph:
 Config
   ├──────────────> Zap
   ├──────────────> GORM / SQLite
-  └──────────────> HTTP Server
+  ├──────────────> HTTP middleware configuration
+  └──────────────> http.Server
 
 GORM / SQLite
       |
@@ -1460,14 +1504,16 @@ Resolver root
 gqlgen executable schema
       |
       v
-GraphQL handler
+gqlgen handler (http.Handler)
       |
       v
-Gin router
+Chi router (http.Handler)
       |
       v
-HTTP Server
+http.Server
 ```
+
+Fx builds the graph; packages stay usable w/o Fx. Constructors = ordinary Go funcs, lifecycle hooks limited to resources that actually start/stop work.
 
 ---
 
@@ -1489,108 +1535,186 @@ func NewHandler(
     resolver *resolver.Resolver,
 ) http.Handler {
     schema := generated.NewExecutableSchema(
-        generated.Config{
-            Resolvers: resolver,
-        },
+        generated.Config{Resolvers: resolver},
     )
 
     srv := handler.NewDefaultServer(schema)
-
     return srv
 }
 ```
 
-Router receives the already-constructed handler:
+Router receives already-constructed gqlgen handler, returns standard abstraction:
 
 ```go
 func NewRouter(
     gql http.Handler,
-    logger *zap.Logger,
-) *gin.Engine {
-    engine := gin.New()
+    auth *middleware.Auth,
+    cfg config.Config,
+) http.Handler {
+    r := chi.NewRouter()
 
-    // middleware...
+    r.Use(chimiddleware.RequestID)
+    r.Use(middleware.Recover())
+    r.Use(middleware.AccessLog())
+    r.Use(auth.Optional())
 
-    engine.POST("/graphql", gin.WrapH(gql))
+    r.Method(http.MethodPost, "/graphql", gql)
+    r.Get("/health/live", liveHandler)
+    r.Get("/health/ready", readyHandler)
 
-    return engine
+    return r
 }
 ```
 
-Constructors should remain ordinary Go functions that can be called without Fx in tests.
+Server receives only `http.Handler`:
+
+```go
+func NewServer(
+    cfg config.Config,
+    router http.Handler,
+) *http.Server {
+    return &http.Server{
+        Addr:              cfg.HTTP.Address,
+        Handler:           router,
+        ReadHeaderTimeout: cfg.HTTP.ReadHeaderTimeout,
+        ReadTimeout:       cfg.HTTP.ReadTimeout,
+        WriteTimeout:      cfg.HTTP.WriteTimeout,
+        IdleTimeout:       cfg.HTTP.IdleTimeout,
+        MaxHeaderBytes:    cfg.HTTP.MaxHeaderBytes,
+    }
+}
+```
+
+Constructors stay ordinary Go funcs, callable w/o Fx in tests.
 
 ---
 
 ## 30. HTTP server lifecycle
 
-`internal/server` continues to own `http.Server`.
+`internal/server` owns concrete `http.Server`; Chi owns only route composition.
 
-Conceptual constructor:
+Recommended constructor:
 
 ```go
 func New(
     cfg config.Config,
-    router *gin.Engine,
+    handler http.Handler,
 ) *http.Server {
     return &http.Server{
-        Addr:         cfg.HTTP.Address,
-        Handler:      router,
-        ReadTimeout:  cfg.HTTP.ReadTimeout,
-        WriteTimeout: cfg.HTTP.WriteTimeout,
-        IdleTimeout:  cfg.HTTP.IdleTimeout,
+        Addr:              cfg.HTTP.Address,
+        Handler:           handler,
+        ReadHeaderTimeout: cfg.HTTP.ReadHeaderTimeout,
+        ReadTimeout:       cfg.HTTP.ReadTimeout,
+        WriteTimeout:      cfg.HTTP.WriteTimeout,
+        IdleTimeout:       cfg.HTTP.IdleTimeout,
+        MaxHeaderBytes:    cfg.HTTP.MaxHeaderBytes,
     }
 }
 ```
 
-Use Fx lifecycle hooks for start/stop.
+Always set `ReadHeaderTimeout` explicitly. Keep request-body limits in middleware — `http.Server` has no global request-body-size limit.
+
+### Fx lifecycle
+
+Use Fx lifecycle hooks only for start/stop behavior:
+
+```go
+func RegisterLifecycle(
+    lc fx.Lifecycle,
+    srv *http.Server,
+    logger *zap.Logger,
+) {
+    lc.Append(fx.Hook{
+        OnStart: func(ctx context.Context) error {
+            ln, err := net.Listen("tcp", srv.Addr)
+            if err != nil {
+                return err
+            }
+
+            go func() {
+                if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+                    logger.Error("http server failed", zap.Error(err))
+                }
+            }()
+            return nil
+        },
+        OnStop: func(ctx context.Context) error {
+            return srv.Shutdown(ctx)
+        },
+    })
+}
+```
+
+Binding listener during `OnStart` beats starting `ListenAndServe` blindly in goroutine — startup fails synchronously when address can't bind.
 
 On shutdown:
 
 1. stop accepting new HTTP requests;
-2. allow in-flight GraphQL operations to finish within timeout;
-3. cancel remaining request contexts;
+2. let in-flight GraphQL ops finish within shutdown deadline;
+3. cancel remaining request contexts when deadline expires;
 4. stop background workers;
 5. flush telemetry;
-6. sync Zap;
-7. close the database.
+6. sync Zap where appropriate;
+7. close DB resources.
+
+Shutdown deadline belongs in app config, not hard-coded in router.
 
 ---
 
 ## 31. Middleware order
 
-Recommended Gin middleware order:
+Recommended global middleware order:
 
 ```text
 request ID
--> recovery
+-> panic recovery
+-> trusted client-IP extraction (only when deployment topology is known)
 -> security headers
--> access logging
--> tracing/metrics when introduced
--> body-size limit
+-> access logging / tracing
+-> request body-size limit
 -> CORS
 -> authentication extraction
--> DataLoader injection when implemented at HTTP boundary
+-> request-scoped DataLoader injection
 -> gqlgen handler
 ```
 
-Prefer DataLoader setup that is clearly request scoped.
+Middleware creating context values must run before middleware/handlers consuming those values.
+
+### Baseline middleware choices
+
+Prefer Chi's maintained middleware when it exactly matches responsibility, e.g. `middleware.RequestID`, `middleware.Recoverer`. Keep app-specific behavior (Zap access logging, auth, security policy, request-context conventions) in app-owned middleware.
+
+Do **not** install every Chi middleware by default. Specifically:
+
+- skip path rewriting/cleaning unless API contract requires it;
+- don't enable compression blindly for every response;
+- don't add global request timeouts conflicting w/ GraphQL subscriptions or long-running ops if added later;
+- don't trust `X-Forwarded-For` or similar headers w/o known proxy trust model.
+
+### Client IP
+
+Client-IP extraction is deployment-specific. Configure exactly one strategy based on actual proxy/CDN topology. Never accept arbitrary forwarded headers direct from public internet and use as security/rate-limit identity.
+
+### DataLoaders
+
+DataLoader state must be request-scoped. Middleware may construct loader registry, attach to `r.Context()`, but cache must never share globally across users.
 
 Useful access-log fields:
 
 ```text
 request_id
 method
-route
+route_pattern
 status
 duration
+client_ip
 actor_id
 graphql_operation_name
 graphql_operation_type
 error_code
 ```
 
-Do not log full GraphQL variables by default because they may contain secrets or
-personal data.
+Don't log full GraphQL variables by default — may contain secrets/personal data. Don't use entire GraphQL document as metric label.
 
 ---
 
@@ -1602,7 +1726,7 @@ HTTP logging alone sees mostly:
 POST /graphql
 ```
 
-That is not enough operational context.
+Not enough operational context.
 
 Where practical, enrich request context/logging with:
 
@@ -1620,29 +1744,39 @@ graphql.operation_type = mutation
 
 Avoid high-cardinality labels based on entire query documents.
 
-Do not log full query documents in production by default.
+Don't log full query documents in prod by default.
 
 ---
 
 ## 33. Security baseline
 
-When authentication is enabled:
+When auth enabled:
 
-- validate credential signature, issuer, audience, expiry, and algorithm where applicable;
-- use secure cookie flags for cookie-based authentication;
-- use CSRF protections when cookie authentication makes them necessary;
+- validate credential signature, issuer, audience, expiry, algorithm where applicable;
+- use secure cookie flags for cookie-based auth;
+- use CSRF protections when cookie auth needs them;
 - restrict CORS to known origins;
-- configure Gin trusted proxies explicitly;
-- enforce request body limits;
-- rate-limit authentication and expensive operations;
+- treat proxy/client-IP headers as untrusted unless deployment explicitly defines trusted proxies or trusted ingress header;
+- enforce request-header and request-body limits;
+- set `ReadHeaderTimeout` on `http.Server`;
+- rate-limit auth and expensive ops where required;
 - enforce GraphQL query complexity limits;
 - enforce pagination bounds;
 - avoid logging GraphQL variables by default;
-- prevent secrets and personal data from entering logs;
-- use service-level authorization;
-- keep dependencies and the Go toolchain patched.
+- prevent secrets/personal data entering logs;
+- use service-level authz;
+- disable or explicitly control dev-only playground/introspection behavior;
+- keep deps and Go toolchain patched.
 
-Do not assume GraphQL automatically protects against expensive queries.
+Don't assume GraphQL auto-protects against expensive queries.
+
+### CORS
+
+CORS = HTTP policy, not GraphQL resolver concern. Configure allowed origins, methods, headers, credentials explicit from app config. Avoid permissive wildcard origins when credentials enabled.
+
+### Rate limiting
+
+Rate limiting may be standard `net/http` middleware. Rate-limit key must come from trustworthy identity source (authenticated actor ID or correctly-established client IP). If app ever horizontally scales, move shared rate-limit state out of process.
 
 ---
 
@@ -1655,7 +1789,7 @@ GET /health/live
 GET /health/ready
 ```
 
-Do not model Kubernetes/container health as:
+Don't model Kubernetes/container health as:
 
 ```graphql
 query {
@@ -1685,38 +1819,38 @@ Readiness may verify:
 
 ## 35. GraphQL playground
 
-Development may expose a GraphQL playground on:
-
-```text
-GET /graphql
-```
-
-or:
+Dev may expose GraphQL playground on dedicated route:
 
 ```text
 GET /playground
 ```
 
-Production exposure should be explicitly configured.
-
-Conceptual:
+Conceptual router setup:
 
 ```go
 if cfg.Environment == "development" {
-    engine.GET("/graphql", gin.WrapH(playground.Handler(
+    r.Handle("/playground", playground.Handler(
         "GraphQL Playground",
         "/graphql",
-    )))
+    ))
 }
 ```
 
-Do not accidentally couple production API availability to playground availability.
+Prod exposure must be explicit config decision. Don't accidentally couple prod API availability to playground availability.
+
+Keep primary endpoint focused on GraphQL ops:
+
+```text
+POST /graphql
+```
+
+If GraphQL-over-HTTP GET ops or persisted-query GET requests get supported later, add deliberately + test caching/security semantics rather than enabling GET as side effect of playground.
 
 ---
 
 ## 36. Testing strategy
 
-Use the narrowest test that proves behavior.
+Use narrowest test proving behavior.
 
 | Layer | Test style | Main assertions |
 | --- | --- | --- |
@@ -1731,10 +1865,10 @@ Use the narrowest test that proves behavior.
 
 ### Service tests
 
-Service tests should not require:
+Service tests shouldn't require:
 
 - Fx;
-- Gin;
+- Chi;
 - gqlgen;
 - GORM;
 - SQLite.
@@ -1748,17 +1882,17 @@ svc := taskservice.New(repo, zap.NewNop())
 
 ### Resolver tests
 
-Resolvers may be tested with a fake service:
+Resolvers may test w/ fake service:
 
 ```go
 resolver := resolver.New(fakeTaskService, zap.NewNop())
 ```
 
-Test transport mapping without a real DB.
+Test transport mapping w/o real DB.
 
 ### GraphQL integration tests
 
-Use the real executable schema for important operation-level behavior.
+Use real executable schema for important operation-level behavior.
 
 Example targets:
 
@@ -1784,13 +1918,13 @@ Assert:
 
 Use real SQLite.
 
-Batch methods used by DataLoaders require integration tests.
+Batch methods used by DataLoaders need integration tests.
 
 ---
 
 ## 37. GraphQL schema tests
 
-Schema changes are API changes.
+Schema changes = API changes.
 
 CI should catch unintended generated/schema drift.
 
@@ -1804,12 +1938,12 @@ gqlgen generate
 git diff --exit-code
 ```
 
-As the project matures, consider schema compatibility checks for breaking changes.
+As project matures, consider schema compat checks for breaking changes.
 
 At minimum, review changes that:
 
 - remove fields;
-- change nullable to non-null in unsafe ways;
+- change nullable to non-null unsafely;
 - change argument types;
 - remove enum values;
 - change input requirements;
@@ -1837,7 +1971,7 @@ container build
 container scan
 ```
 
-Runtime requirements remain:
+Runtime reqs remain:
 
 - non-root user where possible;
 - writable mounted SQLite directory;
@@ -1868,10 +2002,10 @@ Execution:
 POST /graphql
      |
      v
-Gin request ID
+http.Server
      |
      v
-Gin auth extraction
+Chi middleware chain
      |
      v
 gqlgen
@@ -1895,10 +2029,17 @@ SQLite
 Responsibilities:
 
 ```text
-Gin
-  establish HTTP/request context
+http.Server
+  listener + protocol lifecycle
+  header/read/write/idle timeouts
+  graceful shutdown
+
+Chi + net/http middleware
+  route matching
+  request ID
   broad authentication extraction
   request limits
+  security headers / CORS
 
 gqlgen
   parse/validate GraphQL document
@@ -1982,7 +2123,7 @@ Avoid one owner query per task.
 
 ## 41. Implementation order
 
-Build one vertical GraphQL slice before adding optional infrastructure.
+Build one vertical GraphQL slice before adding optional infra.
 
 ### Phase 1 — application shell
 
@@ -1991,9 +2132,10 @@ Build one vertical GraphQL slice before adding optional infrastructure.
 3. add typed configuration;
 4. add Uber Fx;
 5. add Zap;
-6. add Gin;
-7. add `http.Server`;
-8. add graceful lifecycle.
+6. add Chi;
+7. create router constructor returning `http.Handler`;
+8. create concrete `http.Server` w/ explicit timeouts;
+9. add Fx lifecycle and graceful shutdown.
 
 ### Phase 2 — GraphQL shell
 
@@ -2004,8 +2146,8 @@ Build one vertical GraphQL slice before adding optional infrastructure.
 5. create root `Mutation`;
 6. generate gqlgen code;
 7. construct gqlgen handler through Fx;
-8. mount `POST /graphql` in Gin;
-9. add dev-only playground.
+8. mount `POST /graphql` direct with Chi;
+9. add dev-only `/playground` route.
 
 At this point:
 
@@ -2017,7 +2159,22 @@ query {
 
 should work end-to-end.
 
-### Phase 3 — persistence
+### Phase 3 — HTTP production baseline
+
+Add before business surface grows:
+
+1. request IDs;
+2. panic recovery;
+3. Zap access logging;
+4. security headers;
+5. body-size limits;
+6. explicit CORS policy;
+7. trusted client-IP config if required;
+8. liveness/readiness endpoints;
+9. `ReadHeaderTimeout`, read/write/idle timeouts, header-size limits;
+10. router and middleware `httptest` coverage.
+
+### Phase 4 — persistence
 
 1. add GORM;
 2. add SQLite driver;
@@ -2028,7 +2185,7 @@ should work end-to-end.
 7. add migration Makefile commands;
 8. add DB readiness check.
 
-### Phase 4 — first GraphQL vertical slice
+### Phase 5 — first GraphQL vertical slice
 
 Implement:
 
@@ -2056,39 +2213,33 @@ type Mutation {
 }
 ```
 
-### Phase 5 — GraphQL production baseline
+### Phase 6 — GraphQL production baseline
 
 Add:
 
 - centralized error presenter;
-- panic recovery;
-- request IDs;
+- gqlgen panic recovery;
 - operation logging;
 - pagination limits;
 - query complexity limit;
-- request body limit;
-- security headers;
-- CORS;
 - GraphQL integration tests.
 
-### Phase 6 — authentication
+### Phase 7 — authentication
 
 Add:
 
 - identity model;
-- Gin authentication extraction;
-- actor request context;
+- HTTP auth extraction middleware;
+- typed actor request context;
 - optional broad `@auth` directive if useful;
 - service-level authorization;
 - authentication/security tests.
 
-### Phase 7 — DataLoaders
+### Phase 8 — DataLoaders
 
-Add DataLoaders only for relations that exhibit N+1 behavior.
+Add DataLoaders only for relations showing N+1 behavior. Start w/ actual measured/query-count evidence.
 
-Start with actual measured/query-count evidence.
-
-### Phase 8 — operational maturity
+### Phase 9 — operational maturity
 
 Add as required:
 
@@ -2105,27 +2256,27 @@ Add as required:
 
 ## 42. Definition of done for a new GraphQL operation
 
-A new query or mutation is complete when:
+New query/mutation done when:
 
-- its schema is explicit;
-- nullable/non-null behavior is intentional;
-- input types are explicit;
-- list fields are bounded/paginated;
-- generated gqlgen code is current;
+- schema explicit;
+- nullable/non-null behavior intentional;
+- input types explicit;
+- list fields bounded/paginated;
+- generated gqlgen code current;
 - resolver contains only transport mapping;
 - service contains business behavior;
 - service accepts `context.Context`;
-- authorization is enforced where required;
-- persistence is behind repository interfaces;
+- authorization enforced where required;
+- persistence behind repository interfaces;
 - repository uses `WithContext`;
-- persistence errors are translated;
+- persistence errors translated;
 - application errors map to stable GraphQL error codes;
-- raw GORM/SQLite errors cannot reach clients;
+- raw GORM/SQLite errors can't reach clients;
 - logging contains request/operation context;
-- expected success/error paths are tested;
-- required migration is included;
-- N+1 behavior has been considered;
-- expensive-operation behavior is bounded.
+- expected success/error paths tested;
+- required migration included;
+- N+1 behavior considered;
+- expensive-operation behavior bounded.
 
 ---
 
@@ -2133,25 +2284,7 @@ A new query or mutation is complete when:
 
 ### Fat resolver
 
-Avoid:
-
-```go
-func (r *mutationResolver) CreateTask(
-    ctx context.Context,
-    input model.CreateTaskInput,
-) (*model.Task, error) {
-    // inspect auth
-    // query GORM
-    // enforce permissions
-    // write multiple tables
-    // call external API
-    // construct response
-}
-```
-
-Move business orchestration into a service.
-
----
+Avoid resolvers doing auth parsing, GORM queries, permission policy, multi-table writes, external calls, response construction all in one func. Move business orchestration to service.
 
 ### Resolver calling GORM
 
@@ -2167,147 +2300,81 @@ Use:
 resolver -> service -> repository
 ```
 
----
-
 ### GraphQL models used as persistence entities
 
-Avoid:
-
-```go
-func (r *Repository) Create(ctx context.Context, task *model.Task) error
-```
-
-Prefer persistence/domain-owned types.
-
----
+Avoid repo methods accepting gqlgen-generated transport models just to save mapping code. Prefer persistence/domain-owned types.
 
 ### GraphQL types leaking into services
 
-Avoid:
+Avoid service APIs accepting/returning `internal/graphql/model` types. Prefer service-owned input/result types.
 
-```go
-func (s *Service) Create(
-    ctx context.Context,
-    input model.CreateTaskInput,
-) (*model.Task, error)
-```
-
-when `model` is gqlgen-generated transport code.
-
-Prefer:
-
-```go
-func (s *Service) Create(
-    ctx context.Context,
-    input task.CreateInput,
-) (*task.Task, error)
-```
-
----
-
-### `gin.Context` inside resolvers/services
+### HTTP/router types inside resolvers or services
 
 Avoid:
 
 ```go
-func (s *Service) Create(ctx *gin.Context, ...)
+func (s *Service) Create(r *http.Request, ...)
 ```
+
+and avoid passing `chi.Router`, `chi.RouteContext`, or URL params into business logic.
 
 Use:
 
 ```go
-func (s *Service) Create(ctx context.Context, ...)
+func (s *Service) Create(ctx context.Context, input CreateInput) (...)
 ```
 
----
+### Exposing concrete Chi router unnecessarily
 
-### Repository from DataLoader bypasses policy
+Prefer:
 
-Avoid using DataLoaders as a shortcut around authorization.
-
-DataLoader results must still be safe for the requesting actor/use case.
-
----
-
-### Unbounded lists
-
-Avoid:
-
-```graphql
-tasks: [Task!]!
+```go
+func NewRouter(...) http.Handler
 ```
 
-for potentially large tables.
+over making every consumer depend on `chi.Router`. Return concrete router only when caller truly needs Chi-specific route registration/inspection.
 
-Use pagination.
+### Middleware registered after routes
 
----
+Register global `r.Use(...)` middleware before routes. Use `Group`, `With`, `Route` for scoped middleware instead of mutating parent chain after route registration.
 
-### Business errors encoded as ad-hoc strings
+### Blindly trusting forwarded IP headers
 
-Avoid clients depending on:
-
-```text
-"task not found"
-```
-
-Use stable:
-
-```json
-{
-  "extensions": {
-    "code": "NOT_FOUND"
-  }
-}
-```
-
----
-
-### REST envelope inside GraphQL
-
-Avoid returning custom wrappers like:
-
-```graphql
-type CreateTaskPayload {
-  data: Task
-  error: APIError
-}
-```
-
-for every operation solely to imitate REST.
-
-Use GraphQL `data` + `errors` unless the domain genuinely requires a payload object.
-
----
-
-### GraphQL directives as the whole authorization layer
-
-Avoid treating `@auth` as sufficient domain authorization.
-
-The service remains authoritative.
-
----
+Don't treat `X-Forwarded-For`, `X-Real-IP`, or CDN headers as trustworthy w/o documented proxy topology. Spoofable client IP must not become basis for authz or rate limiting.
 
 ### Global DataLoader cache
 
-Avoid request-independent DataLoader caches unless explicitly designed with safe cache
-semantics.
+Default DataLoaders are request-scoped. No process-global loader cache across users.
 
-Default DataLoaders are request-scoped.
+### Repository from DataLoader bypasses policy
 
----
+Don't use DataLoaders as shortcut around authz. Loader results must stay safe for requesting actor/use case.
+
+### Unbounded lists
+
+Avoid potentially large GraphQL list fields w/o pagination.
+
+### Business errors encoded as ad-hoc strings
+
+Clients should depend on stable `extensions.code` values, not exact human error messages.
+
+### REST envelope inside GraphQL
+
+Don't wrap every GraphQL operation in REST-style `{data,error}` payload just to imitate REST. Use GraphQL `data` + `errors` unless domain genuinely needs payload object.
+
+### GraphQL directives as the whole authorization layer
+
+Directive may implement broad access guard; service stays authoritative for resource and domain authz.
 
 ### Automatic schema migration
 
-Do not run unconstrained GORM `AutoMigrate` in production startup.
-
-Use Goose.
+Don't run unconstrained GORM `AutoMigrate` in prod startup. Use Goose.
 
 ---
 
 ## 44. What remains from the previous REST-oriented architecture
 
-The following decisions remain unchanged from the existing architecture:
+Unchanged from original architecture direction:
 
 - small `cmd/api/main.go`;
 - Uber Fx composition;
@@ -2324,13 +2391,10 @@ The following decisions remain unchanged from the existing architecture:
 - repository integration tests;
 - production database backup rules.
 
-The existing document already established Gin, Fx, GORM, SQLite, Goose, Zap, layered
-boundaries, and `internal/` as the application-code root.
-
-The primary transport change is:
+Transport refinement:
 
 ```text
-OLD
+EARLIER REST-ORIENTED SHAPE
 
 router
   -> middleware
@@ -2340,11 +2404,10 @@ router
   -> GORM
   -> SQLite
 
+GRAPHQL-FIRST SHAPE
 
-NEW
-
-Gin
-  -> middleware
+http.Server
+  -> Chi / net-http middleware
   -> gqlgen
   -> resolver
   -> service
@@ -2352,6 +2415,8 @@ Gin
   -> GORM
   -> SQLite
 ```
+
+Switch from Gin to Chi intentionally limited to HTTP boundary. Resolver, service, repository, database, migration, app-lifecycle boundaries unchanged.
 
 ---
 
@@ -2376,12 +2441,15 @@ Apache Answer-inspired concept      GraphQL-first project
 HTTP controller boundary       ->   gqlgen resolver boundary
 REST route-per-use-case        ->   GraphQL schema/operation
 request/response DTOs          ->   GraphQL inputs/models + service DTOs
+HTTP framework                 ->   Chi + standard net/http
 manual/Wire-style composition  ->   Uber Fx
 persistence stack              ->   GORM
 server SQL DB patterns         ->   SQLite
 migration mechanism            ->   Goose
 logging                        ->   Zap
 ```
+
+Borrow **principles and boundaries**, not another repo's package tree mechanically.
 
 ---
 
@@ -2398,6 +2466,16 @@ schema
   -> SQLite
 ```
 
+HTTP construction:
+
+```text
+http.Server
+  -> http.Handler
+      -> Chi router
+          -> net/http middleware
+          -> gqlgen handler
+```
+
 Application construction:
 
 ```text
@@ -2409,9 +2487,9 @@ Uber Fx
   -> services
   -> GraphQL resolvers
   -> gqlgen executable schema
-  -> gqlgen handler
-  -> Gin router
-  -> HTTP server
+  -> gqlgen handler (http.Handler)
+  -> Chi router (http.Handler)
+  -> http.Server
 ```
 
 For related-object fields:
@@ -2425,16 +2503,67 @@ field resolver
 For authorization:
 
 ```text
-Gin middleware/directive
+HTTP middleware/directive
   -> broad authentication/access requirement
 
 Service
   -> authoritative resource/domain authorization
 ```
 
-The most important boundary is:
+Most important boundaries:
 
-> **GraphQL is the transport contract. Services are the application contract. Repositories are the persistence contract.**
+> **GraphQL is the transport contract. Services are the application contract. Repositories are the persistence contract. `http.Handler` is the HTTP composition contract.**
 
-If a future design decision mixes those responsibilities, it should have a concrete
-reason rather than being done for convenience.
+Future design decision mixing these responsibilities needs concrete reason, not convenience.
+
+---
+
+## 47. Production OSS and upstream reference patterns
+
+Architecture intentionally informed by active upstream/production OSS codebases, tailored to this project's smaller scope.
+
+### go-chi/chi
+
+Reference: <https://github.com/go-chi/chi>
+
+Patterns adopted:
+
+- standard `net/http` handlers and middleware as fundamental abstraction;
+- small composable router surface;
+- middleware-driven request context;
+- route grouping only when it improves ownership or policy clarity;
+- explicit deployment-aware client-IP handling rather than blindly trusting forwarded headers.
+
+### gqlgen
+
+Reference: <https://github.com/99designs/gqlgen>
+
+Patterns adopted:
+
+- schema-first GraphQL;
+- executable GraphQL server exposed as `http.Handler`;
+- authentication data propagated through `context.Context`;
+- centralized GraphQL error/recovery behavior;
+- transport-specific concerns kept outside business services.
+
+### Stash
+
+Reference: <https://github.com/stashapp/stash>
+
+Stash = substantial Go app using gqlgen + Chi in same HTTP stack. Lesson: Chi can stay outer HTTP/middleware boundary while gqlgen owns GraphQL execution + request-scoped loader behavior.
+
+### GUAC
+
+Reference: <https://github.com/guacsec/guac>
+
+GUAC = large Go OSS codebase with both gqlgen + Chi. Its scale reinforces keeping API, transport, app concerns separated — don't let GraphQL-generated types or router details become the domain model.
+
+### Probo
+
+Reference: <https://github.com/getprobo/probo>
+
+Probo = active production-oriented Go OSS app exposing GraphQL API, currently using gqlgen + Chi. Repo documents explicit rule: unexpected internal errors must not leak to API clients. Reinforces this doc's centralized GraphQL error mapping + safe-error policy.
+
+### Reference rule
+
+Don't copy package names or directory trees just cuz large project uses them. Adopt pattern only when it solves a responsibility that exists here. Project should stay smaller than its references until own complexity demands more layers.

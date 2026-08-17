@@ -3,6 +3,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"time"
@@ -15,17 +16,24 @@ import (
 type Config struct {
 	Environment string `env:"SHARED_ENV" envDefault:"development"`
 	Server      ServerConfig
+	CORS        CORSConfig
 	Database    DatabaseConfig
 	Log         LogConfig
+}
+
+type CORSConfig struct {
+	AllowedOrigins []string `env:"SERVER_CORS_ALLOWED_ORIGINS" envSeparator:","`
 }
 
 type ServerConfig struct {
 	Host              string        `env:"SERVER_HOST" envDefault:"0.0.0.0"`
 	Port              int           `env:"SERVER_PORT" envDefault:"8080"`
+	ReadHeaderTimeout time.Duration `env:"SERVER_READ_HEADER_TIMEOUT" envDefault:"5s"`
 	ReadTimeout       time.Duration `env:"SERVER_READ_TIMEOUT" envDefault:"15s"`
 	WriteTimeout      time.Duration `env:"SERVER_WRITE_TIMEOUT" envDefault:"15s"`
 	IdleTimeout       time.Duration `env:"SERVER_IDLE_TIMEOUT" envDefault:"60s"`
 	ShutdownTimeout   time.Duration `env:"SERVER_SHUTDOWN_TIMEOUT" envDefault:"10s"`
+	MaxHeaderBytes    int           `env:"SERVER_MAX_HEADER_BYTES" envDefault:"1048576"`
 	MaxBodyBytes      int64         `env:"SERVER_MAX_BODY_BYTES" envDefault:"1048576"`
 	GraphQLComplexity int           `env:"SERVER_GRAPHQL_COMPLEXITY" envDefault:"250"`
 }
@@ -99,11 +107,23 @@ func (c Config) Validate() error {
 	if c.Database.MaxOpenConns < 1 || c.Database.MaxIdleConns < 0 {
 		return fmt.Errorf("database connection limits are invalid")
 	}
+	if c.Server.ReadHeaderTimeout <= 0 || c.Server.ReadTimeout <= 0 || c.Server.WriteTimeout <= 0 || c.Server.IdleTimeout <= 0 || c.Server.ShutdownTimeout <= 0 {
+		return fmt.Errorf("server timeouts must be positive")
+	}
+	if c.Server.MaxHeaderBytes < 1 {
+		return fmt.Errorf("SERVER_MAX_HEADER_BYTES must be positive")
+	}
 	if c.Server.MaxBodyBytes < 1 {
 		return fmt.Errorf("SERVER_MAX_BODY_BYTES must be positive")
 	}
 	if c.Server.GraphQLComplexity < 1 {
 		return fmt.Errorf("SERVER_GRAPHQL_COMPLEXITY must be positive")
+	}
+	for _, origin := range c.CORS.AllowedOrigins {
+		parsed, err := url.Parse(origin)
+		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil || parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" {
+			return fmt.Errorf("SERVER_CORS_ALLOWED_ORIGINS contains invalid origin %q", origin)
+		}
 	}
 	return nil
 }

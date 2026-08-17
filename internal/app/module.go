@@ -5,7 +5,6 @@ import (
 	"github.com/soumajitgh/mobicode/internal/config"
 	"github.com/soumajitgh/mobicode/internal/database"
 	graphqlapi "github.com/soumajitgh/mobicode/internal/graphql"
-	"github.com/soumajitgh/mobicode/internal/middleware"
 	"github.com/soumajitgh/mobicode/internal/migrations"
 	"github.com/soumajitgh/mobicode/internal/observability"
 	"github.com/soumajitgh/mobicode/internal/repository"
@@ -16,4 +15,4 @@ import (
 	"go.uber.org/fx"
 )
 
-var Module = fx.Module("app", config.Module, observability.Module, database.Module, migrations.Module, repository.Module, service.Module, graphqlapi.Module, middleware.Module, router.Module, server.Module)
+var Module = fx.Module("app", config.Module, observability.Module, database.Module, migrations.Module, repository.Module, service.Module, graphqlapi.Module, router.Module, server.Module)

@@ -5,7 +5,7 @@ import (
 	"errors"
 
 	"github.com/soumajitgh/mobicode/internal/apperror"
-	"github.com/soumajitgh/mobicode/internal/middleware"
+	"github.com/soumajitgh/mobicode/internal/requestctx"
 
 	"github.com/vektah/gqlparser/v2/gqlerror"
 )
@@ -14,7 +14,7 @@ import (
 func PresentError(ctx context.Context, err error) *gqlerror.Error {
 	code, message := graphQLErrorDetails(err)
 	graphQLError := &gqlerror.Error{Message: message, Extensions: map[string]any{"code": code}}
-	if requestID := middleware.RequestIDFromContext(ctx); requestID != "" {
+	if requestID := requestctx.RequestID(ctx); requestID != "" {
 		graphQLError.Extensions["request_id"] = requestID
 	}
 	return graphQLError

@@ -7,4 +7,4 @@ import (
 	"go.uber.org/fx"
 )
 
-var Module = fx.Module("graphql", resolver.Module, fx.Provide(NewHandler))
+var Module = fx.Module("graphql", resolver.Module, fx.Provide(fx.Annotate(NewHandler, fx.ResultTags(`name:"graphql"`))))

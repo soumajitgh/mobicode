@@ -1,48 +1,22 @@
 package middleware
 
 import (
-	"context"
-	"crypto/rand"
-	"encoding/hex"
+	"net/http"
 
-	"github.com/gin-gonic/gin"
+	"github.com/soumajitgh/mobicode/internal/requestctx"
+
+	chimiddleware "github.com/go-chi/chi/v5/middleware"
 )
 
-const requestIDKey = "request_id"
+const requestIDHeader = "X-Request-ID"
 
-type requestIDContextKey struct{}
-
-// RequestIDMiddleware assigns a request identifier to each request.
-func RequestIDMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		id := c.GetHeader("X-Request-ID")
-		if id == "" {
-			bytes := make([]byte, 16)
-			if _, err := rand.Read(bytes); err == nil {
-				id = hex.EncodeToString(bytes)
-			} else {
-				id = "unknown"
-			}
+// RequestContext exposes Chi's request ID through the app-owned context contract.
+func RequestContext(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := chimiddleware.GetReqID(r.Context())
+		if id != "" {
+			w.Header().Set(requestIDHeader, id)
 		}
-		c.Set(requestIDKey, id)
-		c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), requestIDContextKey{}, id))
-		c.Header("X-Request-ID", id)
-		c.Next()
-	}
-}
-
-// RequestIDFromContext returns the request identifier from a standard context.
-func RequestIDFromContext(ctx context.Context) string {
-	id, _ := ctx.Value(requestIDContextKey{}).(string)
-	return id
-}
-
-// RequestID returns the request identifier from Gin context.
-func RequestID(c *gin.Context) string {
-	value, ok := c.Get(requestIDKey)
-	if !ok {
-		return ""
-	}
-	id, _ := value.(string)
-	return id
+		next.ServeHTTP(w, r.WithContext(requestctx.WithRequestID(r.Context(), id)))
+	})
 }

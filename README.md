@@ -38,8 +38,8 @@ make run
 
 `make run` starts libSQL with Docker Compose, applies migrations, and serves the
 API. GraphQL is available at `http://localhost:8080/graphql`; development mode
-also exposes the GraphQL Playground at that URL. Health endpoints are
-`/health/live` and `/health/ready`.
+also exposes the GraphQL Playground at `http://localhost:8080/playground`.
+Health endpoints are `/health/live` and `/health/ready`.
 
 For live reload, install [Air](https://github.com/air-verse/air) and use
 `make dev`.
