@@ -4,10 +4,61 @@
   "sourceRoot": "apps/server",
   "projectType": "application",
   "targets": {
-    "serve": {
+    "dev": {
       "executor": "nx:run-commands",
+      "cache": false,
+      "dependsOn": ["deps-up"],
       "options": {
         "command": "make dev",
+        "cwd": "apps/server"
+      }
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "command": "nx run server:dev",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "run": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "dependsOn": ["deps-up"],
+      "options": {
+        "command": "make run",
+        "cwd": "apps/server"
+      }
+    },
+    "deps-up": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "command": "docker compose up -d libsql",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "deps-down": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "command": "docker compose down",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "deps-logs": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "command": "docker compose logs -f libsql",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "migrate-create": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "command": "make migrate-create name={args.name}",
         "cwd": "apps/server"
       }
     },

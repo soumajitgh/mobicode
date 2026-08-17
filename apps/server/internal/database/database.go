@@ -5,13 +5,10 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"net/url"
-	"os"
-	"path/filepath"
-	"strconv"
 
 	"mobicode/apps/server/internal/config"
 
+	"github.com/tursodatabase/libsql-client-go/libsql"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 	"gorm.io/driver/sqlite"
@@ -24,27 +21,21 @@ type Result struct {
 	SQLDB *sql.DB
 }
 
-// New opens and configures the SQLite database connection.
+// New opens and configures the remote libSQL database connection.
 func New(cfg config.Config, logger *zap.Logger) (Result, error) {
-	if err := os.MkdirAll(filepath.Dir(cfg.Database.Path), 0o750); err != nil {
-		return Result{}, fmt.Errorf("create database directory: %w", err)
-	}
-	path := url.PathEscape(cfg.Database.Path)
-	dsn := "file:" + path + "?_foreign_keys=on&_busy_timeout=" + strconv.FormatInt(cfg.Database.BusyTimeout.Milliseconds(), 10)
-	if cfg.Database.WAL {
-		dsn += "&_journal_mode=WAL"
-	}
-	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+	connector, err := libsql.NewConnector(cfg.Database.URL)
 	if err != nil {
-		return Result{}, fmt.Errorf("open sqlite database: %w", err)
+		return Result{}, fmt.Errorf("create libsql connector: %w", err)
 	}
-	sqlDB, err := db.DB()
-	if err != nil {
-		return Result{}, fmt.Errorf("get sql database: %w", err)
-	}
+	sqlDB := sql.OpenDB(connector)
 	sqlDB.SetMaxOpenConns(cfg.Database.MaxOpenConns)
 	sqlDB.SetMaxIdleConns(cfg.Database.MaxIdleConns)
-	logger.Info("database initialized", zap.String("path", cfg.Database.Path))
+	db, err := gorm.Open(sqlite.New(sqlite.Config{Conn: sqlDB}), &gorm.Config{})
+	if err != nil {
+		_ = sqlDB.Close()
+		return Result{}, fmt.Errorf("open gorm database: %w", err)
+	}
+	logger.Info("database initialized", zap.String("url", cfg.Database.URL))
 	return Result{DB: db, SQLDB: sqlDB}, nil
 }
 

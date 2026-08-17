@@ -13,8 +13,16 @@
   },
   "scripts": {
     "setup": "pnpm install --frozen-lockfile && mise install",
-    "mobile": "nx start mobile",
-    "server": "nx run server:serve"
+    "dev": "nx run-many --target=dev --projects=server,mobile --parallel=2",
+    "mobile:dev": "nx run mobile:dev",
+    "server:dev": "nx run server:dev",
+    "mobile": "pnpm mobile:dev",
+    "server": "pnpm server:dev",
+    "server:run": "nx run server:run",
+    "deps:up": "nx run server:deps-up",
+    "deps:down": "nx run server:deps-down",
+    "deps:logs": "nx run server:deps-logs",
+    "migration:create": "nx run server:migrate-create"
   },
   "private": true,
   "packageManager": "pnpm@11.13.1",

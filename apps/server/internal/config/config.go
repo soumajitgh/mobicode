@@ -31,11 +31,10 @@ type ServerConfig struct {
 }
 
 type DatabaseConfig struct {
-	Path         string        `env:"SERVER_DATABASE_PATH" envDefault:"./data/app.db"`
-	BusyTimeout  time.Duration `env:"SERVER_DATABASE_BUSY_TIMEOUT" envDefault:"5s"`
-	WAL          bool          `env:"SERVER_DATABASE_WAL" envDefault:"true"`
-	MaxOpenConns int           `env:"SERVER_DATABASE_MAX_OPEN_CONNS" envDefault:"1"`
-	MaxIdleConns int           `env:"SERVER_DATABASE_MAX_IDLE_CONNS" envDefault:"1"`
+	URL            string        `env:"SERVER_DATABASE_URL" envDefault:"http://localhost:9081"`
+	StartupTimeout time.Duration `env:"SERVER_DATABASE_STARTUP_TIMEOUT" envDefault:"30s"`
+	MaxOpenConns   int           `env:"SERVER_DATABASE_MAX_OPEN_CONNS" envDefault:"1"`
+	MaxIdleConns   int           `env:"SERVER_DATABASE_MAX_IDLE_CONNS" envDefault:"1"`
 }
 
 type LogConfig struct {
@@ -90,11 +89,11 @@ func (c Config) Validate() error {
 	if c.Server.Port < 1 || c.Server.Port > 65535 {
 		return fmt.Errorf("SERVER_PORT must be between 1 and 65535")
 	}
-	if c.Database.Path == "" {
-		return fmt.Errorf("SERVER_DATABASE_PATH is required")
+	if c.Database.URL == "" {
+		return fmt.Errorf("SERVER_DATABASE_URL is required")
 	}
-	if c.Database.BusyTimeout <= 0 {
-		return fmt.Errorf("SERVER_DATABASE_BUSY_TIMEOUT must be positive")
+	if c.Database.StartupTimeout <= 0 {
+		return fmt.Errorf("SERVER_DATABASE_STARTUP_TIMEOUT must be positive")
 	}
 	if c.Database.MaxOpenConns < 1 || c.Database.MaxIdleConns < 0 {
 		return fmt.Errorf("database connection limits are invalid")
@@ -104,9 +103,6 @@ func (c Config) Validate() error {
 	}
 	if c.Server.GraphQLComplexity < 1 {
 		return fmt.Errorf("SERVER_GRAPHQL_COMPLEXITY must be positive")
-	}
-	if filepath.Dir(c.Database.Path) == "" {
-		return fmt.Errorf("SERVER_DATABASE_PATH must include a directory")
 	}
 	return nil
 }
