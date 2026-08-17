@@ -1,6 +1,0 @@
-autoInstallPeers: true
-allowBuilds:
-  '@parcel/watcher': false
-  less: false
-  nx: true
-  unrs-resolver: false

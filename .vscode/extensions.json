@@ -1,6 +1,6 @@
 {
   "recommendations": [
-    "nrwl.angular-console",
+    "golang.go",
     "esbenp.prettier-vscode"
   ]
 }
