@@ -1,25 +1,12 @@
 package main
 
 import (
-	"net/http"
+	"mobicode/apps/server/internal/app"
 
-	"github.com/gin-gonic/gin"
-	"mobicode/apps/server/internal/config"
+	"go.uber.org/fx"
 )
 
+// main starts the composed API application.
 func main() {
-	cfg, err := config.Load()
-	if err != nil {
-		panic(err)
-	}
-
-	router := gin.Default()
-
-	router.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"status": "ok"})
-	})
-
-	if err := router.Run(":" + cfg.Server.Port); err != nil {
-		panic(err)
-	}
+	fx.New(app.Module).Run()
 }

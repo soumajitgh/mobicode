@@ -7,7 +7,7 @@
     "serve": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "go run ./cmd/api",
+        "command": "make dev",
         "cwd": "apps/server"
       }
     },
@@ -15,14 +15,35 @@
       "executor": "nx:run-commands",
       "outputs": ["{workspaceRoot}/dist/apps/server"],
       "options": {
-        "command": "go build -o ../../dist/apps/server/server ./cmd/api",
+        "command": "make build",
         "cwd": "apps/server"
       }
     },
     "test": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "go test ./...",
+        "command": "make test",
+        "cwd": "apps/server"
+      }
+    },
+    "format": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "make format",
+        "cwd": "apps/server"
+      }
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "make lint",
+        "cwd": "apps/server"
+      }
+    },
+    "check": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "make check",
         "cwd": "apps/server"
       }
     }
