@@ -1,0 +1,30 @@
+---
+sidebar_position: 1
+---
+
+# Mobicode documentation
+
+Mobicode is a self-hosted, mobile-first coding-agent API. It ships as a single
+Go binary with a GraphQL API, SQLite persistence, and email/password
+authentication.
+
+## Getting Started
+
+Clone the repository and configure the application:
+
+```sh
+git clone https://github.com/soumajitgh/mobicode.git
+cd mobicode
+cp .env.example .env
+```
+
+Set `JWT_SECRET` to a secure value of at least 32 bytes, then initialize and
+start the API:
+
+```sh
+go run ./cmd/mobicode init --config .env
+go run ./cmd/mobicode serve --config .env
+```
+
+The GraphQL API is served at `http://localhost:8080/query`, and health checks
+are available at `http://localhost:8080/health`.

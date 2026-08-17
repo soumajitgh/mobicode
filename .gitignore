@@ -25,6 +25,10 @@
 /mobile/*.mobileprovision
 /mobile/*.orig.*
 
+# Documentation dependencies and generated output
+/docs/node_modules/
+/docs/build/
+
 # Editors and operating systems
 /.idea/
 /.vscode/*

@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	graphmodel "github.com/soumajitgh/mobicode/graph/model"
+	graphmodel "github.com/soumajitgh/mobicode/graphql/model"
 )
 
 // Resolver adapts the user service for GraphQL.

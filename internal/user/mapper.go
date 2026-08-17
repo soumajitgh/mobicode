@@ -1,6 +1,6 @@
 package user
 
-import graphmodel "github.com/soumajitgh/mobicode/graph/model"
+import graphmodel "github.com/soumajitgh/mobicode/graphql/model"
 
 // ToGraphQL maps the persistence model to the GraphQL transport model.
 func ToGraphQL(user *User) *graphmodel.User {

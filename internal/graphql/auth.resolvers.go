@@ -8,7 +8,7 @@ package graphql
 import (
 	"context"
 
-	"github.com/soumajitgh/mobicode/graph/model"
+	"github.com/soumajitgh/mobicode/graphql/model"
 )
 
 // Register is the resolver for the register field.

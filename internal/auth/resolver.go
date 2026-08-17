@@ -3,7 +3,7 @@ package auth
 import (
 	"context"
 
-	graphmodel "github.com/soumajitgh/mobicode/graph/model"
+	graphmodel "github.com/soumajitgh/mobicode/graphql/model"
 	"github.com/soumajitgh/mobicode/internal/user"
 )
 

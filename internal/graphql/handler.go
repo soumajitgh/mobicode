@@ -9,7 +9,7 @@ import (
 	"github.com/vektah/gqlparser/v2/gqlerror"
 	"go.uber.org/zap"
 
-	"github.com/soumajitgh/mobicode/graph/generated"
+	"github.com/soumajitgh/mobicode/graphql/generated"
 	"github.com/soumajitgh/mobicode/internal/auth"
 	"github.com/soumajitgh/mobicode/internal/user"
 )
