@@ -1,78 +1,94 @@
-# MobiCode
+# Mobicode
 
-**A mobile-first coding agent for on-the-go development.**
+Mobicode is a self-hosted, mobile-first coding-agent API. It is a single Go
+binary with a GraphQL API, SQLite persistence, and email/password
+authentication.
 
-MobiCode is a Go-first application. The Go API owns the repository root, while
-the Expo/React Native client is an independent package in [`mobile/`](mobile/).
-The layout follows the same broad ownership model as
-[Apache Answer](https://github.com/apache/answer): one root Go module with the
-client kept in a dedicated subdirectory.
+## Features
 
-## Repository structure
+- GraphQL API at `/query`
+- SQLite with embedded, versioned migrations
+- Email/password authentication with short-lived JWT access tokens and rotated
+  per-device refresh tokens
+- `mobicode init` and `mobicode serve` operational workflow
 
-```text
-.
-├── cmd/api/                 # Go executable
-├── internal/                # Application code
-├── docs/                    # Architecture documentation
-├── mobile/                  # Standalone Expo/React Native app
-├── go.mod                   # Root Go module
-├── Makefile                 # Go-first development commands
-├── Dockerfile               # API image
-└── compose.yml              # Local libSQL dependency
-```
+## Requirements
 
-There is no JavaScript workspace or task orchestrator at the root. JavaScript
-dependencies and commands belong exclusively to `mobile/`.
+- Go 1.26 or later
+- A C compiler with CGO enabled (required by SQLite)
 
-## Run the API
-
-Install the toolchain pinned by Mise, copy the optional environment file, and
-start the server:
+## Quick start
 
 ```sh
-mise install
+git clone https://github.com/soumajitgh/mobicode.git
+cd mobicode
 cp .env.example .env
-make run
 ```
 
-`make run` starts libSQL with Docker Compose, applies migrations, and serves the
-API. GraphQL is available at `http://localhost:8080/graphql`; development mode
-also exposes the GraphQL Playground at `http://localhost:8080/playground`.
-Health endpoints are `/health/live` and `/health/ready`.
-
-For live reload, install [Air](https://github.com/air-verse/air) and use
-`make dev`.
-
-## Run the mobile app
-
-The mobile app manages its own dependencies and lockfile:
+Set a secure `JWT_SECRET` in `.env`. It must be at least 32 bytes:
 
 ```sh
-corepack enable
-pnpm --dir mobile install --frozen-lockfile
-pnpm --dir mobile start
+openssl rand -base64 48
 ```
 
-## Commands
+Initialize the database and start the API:
 
 ```sh
-make dev                         # Start libSQL and the API with live reload
-make run                         # Start libSQL and run the API once
-make build                       # Build build/mobicode
-make test                        # Run Go tests
-make vet                         # Run go vet
-make lint                        # Run golangci-lint
-make check                       # Format, vet, lint, and test the Go code
-make deps-up                     # Start local dependencies
-make deps-down                   # Stop local dependencies; retain their data
-make deps-logs                   # Follow libSQL logs
-make migrate-create name=users  # Create a SQL migration
-make mobile-install              # Install locked mobile dependencies
-make mobile-dev                  # Start Expo
-make mobile-check                # Type-check the mobile app
+go run ./cmd/mobicode init --config .env
+go run ./cmd/mobicode serve --config .env
 ```
+
+The API is available at `http://localhost:8080/query`. Health checks are
+available at `http://localhost:8080/health`.
+
+## Configuration
+
+Configuration comes from environment variables or an optional `.env` file
+passed with `--config`.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `PORT` | `8080` | HTTP server port |
+| `ENV` | `development` | Runtime environment; use `production` for JSON logs |
+| `DATABASE_PATH` | `data/app.db` | SQLite database path |
+| `JWT_SECRET` | — | Required secret for signing access tokens; 32 bytes minimum |
+
+`mobicode init` is idempotent and applies pending migrations. `mobicode serve`
+does not run migrations; it exits with an actionable error until the schema is
+current.
+
+## GraphQL
+
+All application operations use GraphQL. For example, register an account:
+
+```sh
+curl http://localhost:8080/query \
+  -H 'Content-Type: application/json' \
+  --data '{"query":"mutation { register(name: \\"Ada\\", email: \\"ada@example.com\\", password: \\"correct-horse-battery-staple\\") { accessToken refreshToken user { id name email } } }"}'
+```
+
+Store refresh tokens in platform-secure storage such as iOS Keychain or Android
+Keystore. Do not store them in plain local storage.
+
+## Development
+
+```sh
+go test ./...
+go run github.com/99designs/gqlgen generate
+go build ./cmd/mobicode
+```
+
+The Expo/React Native client, when present, lives independently in
+[`mobile/`](mobile/).
+
+## Contributing
+
+Issues and pull requests are welcome. Keep changes focused, add tests for
+behavior changes, and run `go test ./...` before opening a pull request.
+
+For security vulnerabilities, use
+[GitHub's private security advisory form](https://github.com/soumajitgh/mobicode/security/advisories/new).
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE.md)
