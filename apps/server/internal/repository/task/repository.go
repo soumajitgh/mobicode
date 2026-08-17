@@ -45,10 +45,14 @@ func (r *Repository) GetByID(c context.Context, id uint) (*entity.Task, error) {
 	return &t, nil
 }
 
-// List returns all stored Tasks in identifier order.
-func (r *Repository) List(c context.Context) ([]entity.Task, error) {
+// List returns a bounded page of stored Tasks in identifier order.
+func (r *Repository) List(c context.Context, after uint, limit uint) ([]entity.Task, error) {
 	var t []entity.Task
-	if e := r.db.WithContext(c).Order("id asc").Find(&t).Error; e != nil {
+	query := r.db.WithContext(c).Order("id asc").Limit(int(limit))
+	if after > 0 {
+		query = query.Where("id > ?", after)
+	}
+	if e := query.Find(&t).Error; e != nil {
 		return nil, persistence(e)
 	}
 	return t, nil

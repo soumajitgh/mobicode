@@ -2,18 +2,19 @@ package router
 
 import (
 	"database/sql"
-	"mobicode/apps/server/internal/config"
-	"mobicode/apps/server/internal/controller"
-	"mobicode/apps/server/internal/middleware"
 	"net/http"
 
+	"mobicode/apps/server/internal/config"
+	"mobicode/apps/server/internal/middleware"
+
+	"github.com/99designs/gqlgen/graphql/playground"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 )
 
 // New builds the Gin router and registers application routes.
-func New(cfg config.Config, logger *zap.Logger, db *sql.DB, tasks *controller.TaskController) *gin.Engine {
+func New(cfg config.Config, logger *zap.Logger, db *sql.DB, graphqlHandler http.Handler) *gin.Engine {
 	if cfg.Environment == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -32,12 +33,10 @@ func New(cfg config.Config, logger *zap.Logger, db *sql.DB, tasks *controller.Ta
 		}
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{"status": "ok"}, "error": nil, "request_id": middleware.RequestID(c)})
 	})
-	api := r.Group("/api/v1/tasks")
-	api.POST("", tasks.Create)
-	api.GET("", tasks.List)
-	api.GET("/:id", tasks.Get)
-	api.PATCH("/:id", tasks.Update)
-	api.DELETE("/:id", tasks.Delete)
+	r.POST("/graphql", gin.WrapH(graphqlHandler))
+	if cfg.Environment != "production" {
+		r.GET("/graphql", gin.WrapH(playground.Handler("GraphQL Playground", "/graphql")))
+	}
 	return r
 }
 

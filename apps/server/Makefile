@@ -6,7 +6,7 @@ GOIMPORTS ?= goimports
 GOLANGCI_LINT ?= golangci-lint
 BUILD_OUTPUT ?= ../../dist/apps/server/server
 
-.PHONY: dev run build test vet format lint check migrate-create migrate-up migrate-down migrate-status migrate-validate
+.PHONY: dev run build test vet format lint check graphql-generate graphql-check migrate-create migrate-up migrate-down migrate-status migrate-validate
 
 dev:
 	$(AIR)
@@ -31,6 +31,13 @@ lint:
 	$(GOLANGCI_LINT) run ./...
 
 check: format vet lint test
+
+graphql-generate:
+	go run github.com/99designs/gqlgen generate
+
+graphql-check:
+	go run github.com/99designs/gqlgen generate
+	git diff --exit-code -- internal/graphql
 
 migrate-create:
 	$(GOOSE) -dir $(MIGRATIONS_DIR) create $(name) sql

@@ -15,7 +15,7 @@ import (
 func NewLogger(cfg config.Config) (*zap.Logger, error) {
 	level := zap.NewAtomicLevel()
 	if err := level.UnmarshalText([]byte(cfg.Log.Level)); err != nil {
-		return nil, fmt.Errorf("parse LOG_LEVEL: %w", err)
+		return nil, fmt.Errorf("parse SERVER_LOG_LEVEL: %w", err)
 	}
 	loggerConfig := zap.NewProductionConfig()
 	if cfg.Log.Development {

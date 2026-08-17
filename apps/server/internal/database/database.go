@@ -30,7 +30,10 @@ func New(cfg config.Config, logger *zap.Logger) (Result, error) {
 		return Result{}, fmt.Errorf("create database directory: %w", err)
 	}
 	path := url.PathEscape(cfg.Database.Path)
-	dsn := "file:" + path + "?_foreign_keys=on&_journal_mode=WAL&_busy_timeout=" + strconv.FormatInt(cfg.Database.BusyTimeout.Milliseconds(), 10)
+	dsn := "file:" + path + "?_foreign_keys=on&_busy_timeout=" + strconv.FormatInt(cfg.Database.BusyTimeout.Milliseconds(), 10)
+	if cfg.Database.WAL {
+		dsn += "&_journal_mode=WAL"
+	}
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	if err != nil {
 		return Result{}, fmt.Errorf("open sqlite database: %w", err)

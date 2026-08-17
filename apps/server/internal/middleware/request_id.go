@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 
@@ -8,6 +9,8 @@ import (
 )
 
 const requestIDKey = "request_id"
+
+type requestIDContextKey struct{}
 
 // RequestIDMiddleware assigns a request identifier to each request.
 func RequestIDMiddleware() gin.HandlerFunc {
@@ -22,9 +25,16 @@ func RequestIDMiddleware() gin.HandlerFunc {
 			}
 		}
 		c.Set(requestIDKey, id)
+		c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), requestIDContextKey{}, id))
 		c.Header("X-Request-ID", id)
 		c.Next()
 	}
+}
+
+// RequestIDFromContext returns the request identifier from a standard context.
+func RequestIDFromContext(ctx context.Context) string {
+	id, _ := ctx.Value(requestIDContextKey{}).(string)
+	return id
 }
 
 // RequestID returns the request identifier from Gin context.

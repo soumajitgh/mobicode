@@ -1,65 +1,61 @@
-# Production-Ready Go/Gin Project Architecture
+# Production-Ready Go/Gin GraphQL-First Project Architecture
 
-This document defines the architecture for a new production Go API inspired by the directory and layering patterns used by Apache Answer, while intentionally using a smaller stack and a simpler operational model.
+This document defines the architecture for a production Go API that keeps the existing
+Gin + Uber Fx + GORM + SQLite + Goose + Zap foundation, but makes **GraphQL the primary
+application API**.
 
-The selected stack is:
-
-- **HTTP framework:** Gin
-- **Dependency injection / application lifecycle:** Uber Fx
-- **ORM:** GORM
-- **Database:** SQLite
-- **Database migrations:** Goose (versioned SQL migrations)
-- **Structured logging:** Uber Zap
-- **Architecture style:** layered, Apache Answer-inspired
-- **Application code location:** `internal/`
-
-The goal is not to clone Apache Answer. The goal is to reuse its strongest ideas around package boundaries, request flow, service ownership, repositories, schemas, entities, routing, and operational structure while keeping the new service compact.
+The architecture remains inspired by Apache Answer's strong package boundaries and
+layering, while replacing the REST/controller-centric transport model with a
+**schema-first GraphQL transport using gqlgen**.
 
 ---
 
-## 1. Architecture goals
+## 1. Final technology decisions
 
-The project should make it easy to:
+| Concern | Decision |
+| --- | --- |
+| Language | Go |
+| HTTP framework | Gin |
+| Primary API | GraphQL |
+| GraphQL implementation | gqlgen |
+| GraphQL style | Schema-first |
+| Dependency injection | Uber Fx |
+| Application lifecycle | Uber Fx |
+| ORM | GORM |
+| Database | SQLite |
+| Database migrations | Goose with versioned SQL migrations |
+| Structured logging | Uber Zap |
+| Application architecture | GraphQL resolver -> service -> repository |
+| GraphQL schema | `.graphqls` files |
+| GraphQL generated models | gqlgen-generated models where appropriate |
+| Persistence models | `internal/entity` |
+| Application code | `internal/` |
+| Public reusable code | `pkg/` only when genuinely reusable |
+| Health endpoints | REST-style Gin endpoints |
+| GraphQL subscriptions | Not enabled initially |
 
-- understand the full path of an HTTP request;
-- keep business logic independent of Gin and GORM;
-- construct the application through explicit Fx modules;
-- test services without starting Gin, Fx, or a database;
-- test repositories against a real SQLite database;
-- keep API schemas separate from persistence entities;
-- replace SQLite later without rewriting business logic;
-- use one consistent structured logging system;
-- add authentication, background work, caching, tracing, or other infrastructure without collapsing package boundaries;
-- shut down cleanly and predictably.
-
-The architecture should start small. New infrastructure should be introduced only when a real requirement appears.
-
----
-
-## 2. Core dependency rule
-
-Dependencies point toward the business logic.
+The selected stack is therefore:
 
 ```text
 Client
   |
   v
-Router
+Gin
   |
   v
-Middleware
+gqlgen GraphQL handler
   |
   v
-Controller
+Resolvers
   |
   v
-Service
+Services
   |
   v
-Repository interface
+Repository interfaces
   ^
   |
-Repository implementation
+Repository implementations
   |
   v
 GORM
@@ -68,28 +64,106 @@ GORM
 SQLite
 ```
 
-The normal request path is:
+---
 
-```text
-route -> middleware -> controller -> service -> repository -> GORM -> SQLite
-```
+## 2. Architecture goals
 
-### Rules
+The project should make it easy to:
 
-1. Controllers may depend on Gin and application services.
-2. Services use `context.Context`, never `*gin.Context`.
-3. Services own business rules, authorization decisions, and transaction boundaries.
-4. Repositories own persistence queries and GORM-specific behavior.
-5. Services do not import GORM.
-6. API request/response schemas are separate from persistence entities.
-7. Lower layers must not import controllers, routers, Gin, or HTTP-specific types.
-8. Fx is primarily a composition and lifecycle concern, not a business-logic dependency.
-9. Zap is the single application logger; packages should not create independent global loggers.
-10. Cross-feature imports must be intentional and should not create circular package dependencies.
+- treat GraphQL as the primary public API contract;
+- understand the full path of a GraphQL operation;
+- keep business logic independent of Gin, gqlgen, GORM, and SQLite;
+- construct the application through explicit Uber Fx modules;
+- keep GraphQL schema/types separate from persistence entities;
+- test services without starting Gin, gqlgen, Fx, or a database;
+- test repositories against a real SQLite database;
+- avoid GraphQL N+1 query problems;
+- apply authentication consistently to GraphQL operations;
+- expose stable GraphQL error codes without leaking internal errors;
+- limit expensive GraphQL queries;
+- replace SQLite later without rewriting business logic;
+- add background jobs, caching, tracing, or subscriptions later without collapsing package boundaries;
+- shut down cleanly and predictably.
+
+The architecture should remain small. GraphQL infrastructure should be introduced only
+when it has an explicit responsibility.
 
 ---
 
-## 3. Recommended directory structure
+## 3. GraphQL-first core dependency rule
+
+Dependencies point toward business logic.
+
+```text
+GraphQL Client
+      |
+      v
+Gin HTTP Middleware
+      |
+      v
+gqlgen Handler
+      |
+      v
+Resolver
+      |
+      v
+Service
+      |
+      v
+Repository interface
+      ^
+      |
+Repository implementation
+      |
+      v
+GORM
+      |
+      v
+SQLite
+```
+
+The normal application request path is:
+
+```text
+POST /graphql
+    -> Gin middleware
+    -> gqlgen operation execution
+    -> resolver
+    -> service
+    -> repository
+    -> GORM
+    -> SQLite
+```
+
+For nested relation fields:
+
+```text
+GraphQL field resolver
+    -> DataLoader
+    -> repository/service
+    -> GORM
+    -> SQLite
+```
+
+### Dependency rules
+
+1. GraphQL resolvers may depend on application services.
+2. Resolvers use `context.Context`, not `*gin.Context`.
+3. Services use `context.Context` and never depend on gqlgen or Gin.
+4. Services own business rules, authorization decisions, orchestration, and transaction boundaries.
+5. Repositories own persistence queries and GORM-specific behavior.
+6. Services do not import GORM.
+7. Persistence entities do not define the GraphQL contract.
+8. GraphQL generated types must not become the persistence model by default.
+9. Lower layers must not import Gin, gqlgen handlers, GraphQL resolvers, or transport-specific code.
+10. Fx is a composition/lifecycle concern, not a business-logic dependency.
+11. Zap is the single application logger.
+12. Resource authorization must not be implemented only in GraphQL directives or middleware.
+13. DataLoader batching is a transport optimization, not a place for business rules.
+
+---
+
+## 4. Recommended directory structure
 
 ```text
 .
@@ -102,6 +176,8 @@ route -> middleware -> controller -> service -> repository -> GORM -> SQLite
 │
 ├── docs/
 │   └── PROJECT_ARCHITECTURE.md
+│
+├── gqlgen.yml
 │
 ├── internal/
 │   ├── app/
@@ -129,13 +205,41 @@ route -> middleware -> controller -> service -> repository -> GORM -> SQLite
 │   │   ├── auth.go
 │   │   └── module.go
 │   │
-│   ├── handler/
-│   │   ├── binding.go
-│   │   ├── error.go
-│   │   └── response.go
-│   │
-│   ├── controller/
-│   │   ├── task_controller.go
+│   ├── graphql/
+│   │   ├── schema/
+│   │   │   ├── schema.graphqls
+│   │   │   ├── task.graphqls
+│   │   │   └── common.graphqls
+│   │   │
+│   │   ├── generated/
+│   │   │   └── generated.go
+│   │   │
+│   │   ├── model/
+│   │   │   └── models_gen.go
+│   │   │
+│   │   ├── resolver/
+│   │   │   ├── resolver.go
+│   │   │   ├── query.resolvers.go
+│   │   │   ├── mutation.resolvers.go
+│   │   │   ├── task.resolvers.go
+│   │   │   └── module.go
+│   │   │
+│   │   ├── directive/
+│   │   │   └── auth.go
+│   │   │
+│   │   ├── scalar/
+│   │   │   └── datetime.go
+│   │   │
+│   │   ├── dataloader/
+│   │   │   ├── loader.go
+│   │   │   ├── middleware.go
+│   │   │   └── module.go
+│   │   │
+│   │   ├── error/
+│   │   │   ├── presenter.go
+│   │   │   └── recover.go
+│   │   │
+│   │   ├── handler.go
 │   │   └── module.go
 │   │
 │   ├── service/
@@ -152,9 +256,6 @@ route -> middleware -> controller -> service -> repository -> GORM -> SQLite
 │   │       └── repository_test.go
 │   │
 │   ├── entity/
-│   │   └── task.go
-│   │
-│   ├── schema/
 │   │   └── task.go
 │   │
 │   ├── database/
@@ -179,7 +280,6 @@ route -> middleware -> controller -> service -> repository -> GORM -> SQLite
 ├── data/
 │   └── .gitkeep
 │
-├── .env.example
 ├── .gitignore
 ├── Dockerfile
 ├── Makefile
@@ -189,344 +289,512 @@ route -> middleware -> controller -> service -> repository -> GORM -> SQLite
 
 ### Directory guidance
 
-Prefer `internal/` for application implementation.
+`internal/graphql` owns the GraphQL transport.
 
-Use `pkg/` only for code intentionally designed to be imported by other Go modules. Do not use `pkg/` as a generic utilities directory.
+It contains:
 
-For a very small service, a feature-first structure may also be used:
+- SDL schema files;
+- gqlgen-generated execution code;
+- GraphQL generated API models;
+- resolvers;
+- GraphQL directives;
+- custom scalar mappings;
+- DataLoader integration;
+- GraphQL error presentation;
+- gqlgen server construction.
+
+It must not contain application business logic.
+
+`internal/service` remains the use-case layer.
+
+`internal/repository` remains the persistence boundary.
+
+`internal/entity` remains the GORM persistence model layer.
+
+---
+
+## 5. Why GraphQL is not placed in `controller/`
+
+The REST architecture used:
 
 ```text
-internal/task/
-├── controller.go
-├── service.go
-├── repository.go
-├── schema.go
-└── module.go
+controller -> service -> repository
 ```
 
-However, for this project the default is the **layer-first structure**, because it remains close to Apache Answer and makes transport, service, persistence, and infrastructure concerns easy to locate.
-
----
-
-## 4. Package responsibilities
-
-## 4.1 `cmd/api`
-
-`main.go` should remain extremely small.
-
-Responsibilities:
-
-- construct the Fx application;
-- include the root application module;
-- call `Run()`.
-
-It should not contain:
-
-- routes;
-- GORM queries;
-- business logic;
-- logger construction;
-- configuration parsing;
-- migrations;
-- HTTP handlers.
-
-Example:
-
-```go
-package main
-
-import (
-    "go.uber.org/fx"
-
-    "example.com/project/internal/app"
-)
-
-func main() {
-    fx.New(
-        app.Module,
-    ).Run()
-}
-```
-
----
-
-## 4.2 `internal/app`
-
-This is the application composition root.
-
-It combines the top-level Fx modules.
-
-Example:
-
-```go
-var Module = fx.Module(
-    "app",
-    config.Module,
-    observability.Module,
-    database.Module,
-    repository.Module,
-    service.Module,
-    controller.Module,
-    middleware.Module,
-    router.Module,
-    server.Module,
-)
-```
-
-The app package should contain composition, not business logic.
-
----
-
-## 4.3 `internal/config`
-
-Configuration is typed and validated at startup.
-
-Example:
-
-```go
-type Config struct {
-    Environment string
-
-    HTTP struct {
-        Host            string
-        Port            int
-        ReadTimeout     time.Duration
-        WriteTimeout    time.Duration
-        IdleTimeout     time.Duration
-        ShutdownTimeout time.Duration
-    }
-
-    Database struct {
-        Path        string
-        BusyTimeout time.Duration
-        WAL         bool
-    }
-
-    Log struct {
-        Level       string
-        Development bool
-    }
-}
-```
-
-Recommended precedence:
+The GraphQL-first architecture uses:
 
 ```text
-defaults < config file < environment variables < command-line flags
+resolver -> service -> repository
 ```
 
-Production rules:
+A GraphQL resolver performs the transport role that a REST controller previously
+performed.
 
-- fail startup if required configuration is invalid;
-- never log secrets;
-- keep example configuration non-sensitive;
-- use absolute or clearly resolved filesystem paths for production SQLite files;
-- validate that the database directory is writable before serving traffic.
+Therefore the default project should **remove `internal/controller` for the primary API**.
+
+Do not create this:
+
+```text
+GraphQL resolver
+    -> controller
+    -> service
+```
+
+That introduces an unnecessary transport-to-transport layer.
+
+Use:
+
+```text
+GraphQL resolver
+    -> service
+```
+
+REST controllers/handlers may still exist later for transport-specific endpoints that
+are genuinely not GraphQL concerns, such as:
+
+```text
+GET /health/live
+GET /health/ready
+```
 
 ---
 
-## 4.4 `internal/observability`
+## 6. GraphQL schema is the API contract
 
-Zap is the application logger.
+The GraphQL schema is the primary public API contract.
 
-The package owns logger construction and Fx registration.
+Example:
 
-Default policy:
+```graphql
+scalar DateTime
 
-- production: JSON logs;
-- development: human-readable development encoder may be used;
-- log level comes from typed configuration;
-- logger is injected as `*zap.Logger`;
-- prefer typed fields over loosely typed key/value logging;
-- call `Sync()` during application shutdown;
-- do not use package-global loggers in application code.
+type Task {
+  id: ID!
+  title: String!
+  status: TaskStatus!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
 
-Example constructor shape:
+enum TaskStatus {
+  PENDING
+  COMPLETED
+}
 
-```go
-func NewLogger(cfg config.Config) (*zap.Logger, error) {
-    // build zap.Config from application config
-    // return configured *zap.Logger
+input CreateTaskInput {
+  title: String!
+}
+
+input UpdateTaskInput {
+  title: String
+  status: TaskStatus
+}
+
+type TaskConnection {
+  nodes: [Task!]!
+  pageInfo: PageInfo!
+}
+
+type PageInfo {
+  hasNextPage: Boolean!
+  endCursor: String
+}
+
+type Query {
+  task(id: ID!): Task
+  tasks(first: Int = 20, after: String): TaskConnection!
+}
+
+type Mutation {
+  createTask(input: CreateTaskInput!): Task!
+  updateTask(id: ID!, input: UpdateTaskInput!): Task!
+  deleteTask(id: ID!): Boolean!
 }
 ```
 
-Fx module:
+### Schema rules
 
-```go
-var Module = fx.Module(
-    "observability",
-    fx.Provide(NewLogger),
-    fx.Invoke(RegisterLoggerLifecycle),
-)
-```
-
-Lifecycle cleanup:
-
-```go
-func RegisterLoggerLifecycle(
-    lc fx.Lifecycle,
-    logger *zap.Logger,
-) {
-    lc.Append(fx.Hook{
-        OnStop: func(ctx context.Context) error {
-            return logger.Sync()
-        },
-    })
-}
-```
-
-Some operating systems may return harmless sync errors for stdout/stderr. If necessary, normalize those errors in the observability package rather than scattering special cases throughout the application.
+1. Organize schema by domain/feature instead of keeping a single huge schema file.
+2. Prefer explicit input types for mutations.
+3. Avoid accepting persistence entities as GraphQL inputs.
+4. Avoid exposing internal database fields just because they exist.
+5. Keep names stable once consumed by clients.
+6. Prefer deprecation over sudden field removal.
+7. Do not use GraphQL types as an excuse to bypass service-level validation.
+8. Keep pagination conventions consistent across list fields.
+9. Avoid exposing unbounded list fields.
+10. Document nullable vs non-null semantics deliberately.
 
 ---
 
-## 4.5 `internal/database`
+## 7. `gqlgen.yml`
 
-This package owns SQLite and GORM construction.
+Keep gqlgen configuration at the repository root.
 
-It provides:
+Conceptual configuration:
 
-- `*gorm.DB`;
-- access to the underlying `*sql.DB` when required for pool/lifecycle operations;
-- SQLite initialization;
-- transaction support;
-- database shutdown hooks.
+```yaml
+schema:
+  - internal/graphql/schema/*.graphqls
 
-The rest of the application should not construct database connections.
+exec:
+  filename: internal/graphql/generated/generated.go
+  package: generated
+
+model:
+  filename: internal/graphql/model/models_gen.go
+  package: model
+
+resolver:
+  layout: follow-schema
+  dir: internal/graphql/resolver
+  package: resolver
+  filename_template: "{name}.resolvers.go"
+
+models:
+  ID:
+    model:
+      - github.com/99designs/gqlgen/graphql.ID
+```
+
+Generated files should be treated as generated code.
+
+Do not hand-edit generated execution code.
+
+Recommended commands:
+
+```makefile
+graphql-generate:
+	go run github.com/99designs/gqlgen generate
+
+graphql-check:
+	go run github.com/99designs/gqlgen generate
+	git diff --exit-code
+```
+
+CI should ensure generated GraphQL code is up to date.
+
+---
+
+## 8. Resolver responsibilities
+
+Resolvers are thin GraphQL adapters.
+
+A resolver should normally:
+
+1. accept gqlgen-provided `context.Context`;
+2. read already-established actor identity from context;
+3. map GraphQL input into service input;
+4. call one application service/use case;
+5. map service output into GraphQL output when required;
+6. return stable application errors for centralized GraphQL error presentation.
 
 Example:
 
 ```go
-func New(cfg config.Config, logger *zap.Logger) (*gorm.DB, error) {
-    db, err := gorm.Open(
-        sqlite.Open(cfg.Database.Path),
-        &gorm.Config{},
-    )
+func (r *mutationResolver) CreateTask(
+    ctx context.Context,
+    input model.CreateTaskInput,
+) (*model.Task, error) {
+    actor, err := auth.ActorFromContext(ctx)
     if err != nil {
-        return nil, fmt.Errorf("open sqlite database: %w", err)
+        return nil, err
     }
 
-    return db, nil
+    result, err := r.taskService.Create(ctx, task.CreateInput{
+        ActorID: actor.ID,
+        Title:   input.Title,
+    })
+    if err != nil {
+        return nil, err
+    }
+
+    return mapTask(result), nil
 }
 ```
 
-The concrete implementation should additionally configure SQLite behavior explicitly.
+Resolvers must not:
+
+- issue GORM queries;
+- open transactions;
+- implement reusable permission policy;
+- contain workflow orchestration;
+- know SQLite details;
+- log every error independently;
+- depend directly on `*gin.Context`;
+- return raw GORM errors.
 
 ---
 
-## 5. SQLite strategy
+## 9. Resolver root
 
-SQLite is the primary database for this project.
+Use one resolver root object to hold service dependencies required by generated
+resolvers.
 
-This is an intentional choice, not a temporary mock database.
+Example:
 
-### 5.1 Database file
-
-Recommended development path:
-
-```text
-./data/app.db
+```go
+type Resolver struct {
+    TaskService task.Service
+    Logger      *zap.Logger
+}
 ```
 
-Production should use a persistent mounted directory, for example:
+Constructor:
 
-```text
-/data/app.db
+```go
+func New(
+    taskService task.Service,
+    logger *zap.Logger,
+) *Resolver {
+    return &Resolver{
+        TaskService: taskService,
+        Logger:      logger,
+    }
+}
 ```
 
-The database file must not live in a temporary container filesystem if persistence is required.
+Do not place mutable request state in the resolver root.
 
-### 5.2 WAL mode
-
-Enable Write-Ahead Logging unless deployment constraints require otherwise:
-
-```sql
-PRAGMA journal_mode=WAL;
-```
-
-WAL allows readers and a writer to operate concurrently more effectively than the default rollback journal model, but SQLite still permits only one writer at a time.
-
-Therefore this architecture is appropriate for workloads where:
-
-- the service has moderate write concurrency;
-- the database is local to the application host;
-- horizontal replicas do not independently write to the same SQLite file over a network filesystem.
-
-Do not place a WAL-mode SQLite database on a network filesystem and expect normal multi-host database semantics.
-
-### 5.3 Foreign keys
-
-Foreign key enforcement must be enabled explicitly:
-
-```sql
-PRAGMA foreign_keys=ON;
-```
-
-Do not rely on environment defaults.
-
-### 5.4 Busy handling
-
-Configure a bounded busy timeout so short writer contention does not immediately fail requests.
-
-Example policy:
-
-```text
-busy timeout: 5 seconds
-```
-
-The exact value should be configurable and tuned from observed workload.
-
-### 5.5 Connection pool
-
-Because SQLite has different concurrency characteristics from PostgreSQL or MySQL, database/sql pool settings should be conservative.
-
-Initial policy:
-
-```text
-MaxOpenConns:  1-4, workload dependent
-MaxIdleConns:  small
-ConnMaxLifetime: bounded if needed
-```
-
-Do not copy PostgreSQL-sized pool settings into SQLite.
-
-Measure before increasing concurrency.
-
-### 5.6 Deployment constraint
-
-The official GORM SQLite driver uses the `go-sqlite3` driver and therefore requires CGO.
-
-The build environment and final container strategy must account for that requirement.
-
-If a CGO-free build becomes a hard requirement later, the driver can be reconsidered without changing service interfaces or repository contracts.
+Request-specific state belongs in `context.Context`.
 
 ---
 
-## 6. GORM rules
+## 10. Gin's role in a GraphQL-first application
 
-GORM belongs in the repository and database layers.
+Gin remains the HTTP server/router layer.
+
+Gin owns:
+
+- HTTP server integration;
+- request ID middleware;
+- recovery middleware;
+- security headers;
+- CORS;
+- broad authentication extraction;
+- body-size limits;
+- access logging;
+- health routes;
+- mounting the gqlgen handler.
+
+Gin does **not** own GraphQL field resolution.
+
+Recommended routes:
+
+```text
+POST /graphql      -> GraphQL operations
+GET  /graphql      -> GraphQL playground in development only
+GET  /health/live
+GET  /health/ready
+```
+
+A production router should conceptually look like:
+
+```go
+func NewRouter(
+    gqlHandler http.Handler,
+    authMiddleware *middleware.Auth,
+) *gin.Engine {
+    engine := gin.New()
+
+    engine.Use(
+        middleware.RequestID(),
+        middleware.Recovery(),
+        middleware.SecurityHeaders(),
+        middleware.AccessLog(),
+        middleware.BodyLimit(),
+        middleware.CORS(),
+        authMiddleware.Optional(),
+    )
+
+    engine.POST("/graphql", gin.WrapH(gqlHandler))
+
+    engine.GET("/health/live", liveHandler)
+    engine.GET("/health/ready", readyHandler)
+
+    return engine
+}
+```
+
+Authentication middleware should usually be able to establish an optional actor because
+the same GraphQL endpoint may contain both public and authenticated operations.
+
+Field/use-case authorization still occurs deeper in the application.
+
+---
+
+## 11. Authentication flow
+
+GraphQL uses a single primary HTTP endpoint, so route-level authorization is less useful
+than in REST.
+
+Recommended flow:
+
+```text
+Authorization header / cookie
+        |
+        v
+Gin auth middleware
+        |
+        v
+validate credential
+        |
+        v
+actor stored in request context
+        |
+        v
+gqlgen
+        |
+        v
+resolver
+        |
+        v
+service-level authorization
+```
+
+### Rule
+
+Authentication answers:
+
+```text
+Who is calling?
+```
+
+Service authorization answers:
+
+```text
+May this actor perform this use case on this resource?
+```
+
+Do not rely only on a GraphQL directive such as:
+
+```graphql
+@auth
+```
+
+for resource-level authorization.
+
+A directive may enforce broad requirements such as "must be logged in", while the
+service remains responsible for domain authorization.
+
+---
+
+## 12. Context propagation
+
+The Go request context is the request-scoped carrier.
+
+Use it for:
+
+- cancellation;
+- deadlines;
+- request ID;
+- authenticated actor;
+- tracing context;
+- DataLoader registry.
+
+Do not use context for arbitrary business parameters that should be explicit function
+arguments.
+
+Example actor accessor:
+
+```go
+type actorKey struct{}
+
+func WithActor(ctx context.Context, actor Actor) context.Context {
+    return context.WithValue(ctx, actorKey{}, actor)
+}
+
+func ActorFromContext(ctx context.Context) (Actor, bool) {
+    actor, ok := ctx.Value(actorKey{}).(Actor)
+    return actor, ok
+}
+```
+
+Services should receive actor/resource identifiers explicitly where that improves
+testability and business clarity.
+
+---
+
+## 13. Services
+
+Services implement application use cases.
+
+They own:
+
+- business invariants;
+- authorization decisions;
+- orchestration across repositories;
+- transaction boundaries;
+- interaction with external services;
+- domain/application validation;
+- stable application errors.
+
+Prefer service-owned input/output types rather than passing generated GraphQL models deep
+into the business layer.
+
+Example:
+
+```go
+type CreateInput struct {
+    ActorID uint
+    Title   string
+}
+
+type Task struct {
+    ID        uint
+    Title     string
+    Status    string
+    CreatedAt time.Time
+    UpdatedAt time.Time
+}
+
+type Service interface {
+    Create(ctx context.Context, input CreateInput) (*Task, error)
+    GetByID(ctx context.Context, actorID, taskID uint) (*Task, error)
+}
+```
+
+This preserves:
+
+```text
+GraphQL transport model != application model != persistence model
+```
+
+For a tiny feature, application DTOs may be lightweight, but the dependency direction
+must remain the same.
+
+---
+
+## 14. Repository layer
+
+GORM belongs in repository and database packages.
 
 Good dependency direction:
 
 ```text
+resolver
+   |
+   v
 service
-  |
-  v
+   |
+   v
 repository interface
-  ^
-  |
+   ^
+   |
 repository implementation
-  |
-  v
-*gorm.DB
+   |
+   v
+GORM
 ```
 
 Avoid:
 
 ```text
-service -> *gorm.DB
+resolver -> GORM
+service  -> GORM
 ```
 
-### 6.1 Repository example
+Example:
 
 ```go
 type Repository struct {
@@ -555,57 +823,28 @@ func (r *Repository) GetByID(
 }
 ```
 
-### 6.2 Context
-
-Every repository operation must accept `context.Context` and attach it to GORM operations.
-
-```go
-r.db.WithContext(ctx)
-```
-
-This allows request cancellation and deadlines to flow into database operations.
-
-### 6.3 Persistence errors
-
-Do not return raw GORM or SQLite errors directly to controllers.
-
-Repository code should translate relevant persistence errors into stable application errors, for example:
-
-```text
-record not found -> ErrNotFound
-unique constraint -> ErrConflict
-busy/locked -> ErrDependencyBusy or retryable internal error
-unexpected DB failure -> wrapped internal error
-```
-
-### 6.4 Query ownership
-
-Repositories may contain:
+Repositories own:
 
 - GORM queries;
 - joins;
 - preloads;
-- persistence-specific filtering;
+- persistence filtering;
 - pagination queries;
-- database constraints/error translation.
+- batch queries used by DataLoaders;
+- constraint/error translation.
 
-Repositories should not contain:
+Repositories do not own:
 
+- GraphQL schema behavior;
+- GraphQL error codes;
 - permission policy;
-- subscription rules;
-- workflow orchestration;
-- HTTP status decisions;
-- request binding.
+- workflow orchestration.
 
 ---
 
-## 7. Entities and schemas
+## 15. Persistence entities
 
-## 7.1 Entities
-
-Entities represent persisted or core domain state.
-
-GORM annotations are allowed here.
+Entities represent persisted/core database state.
 
 Example:
 
@@ -614,6 +853,7 @@ type Task struct {
     ID        uint      `gorm:"primaryKey"`
     OwnerID   uint      `gorm:"not null;index"`
     Title     string    `gorm:"not null"`
+    Status    string    `gorm:"not null;index"`
     CreatedAt time.Time
     UpdatedAt time.Time
 }
@@ -621,98 +861,374 @@ type Task struct {
 
 Entities must not contain:
 
+- gqlgen resolver logic;
+- GraphQL directives;
+- GraphQL descriptions;
 - Gin bindings;
-- controller logic;
 - HTTP status codes;
 - transport-only presentation fields.
 
-## 7.2 Schemas
+Do not automatically bind GraphQL types directly to GORM entities merely to reduce code.
 
-Schemas define the public API contract.
+That shortcut strongly couples the public GraphQL contract to database design.
 
-Example:
+---
 
-```go
-type CreateTaskRequest struct {
-    Title string `json:"title" binding:"required,min=3,max=200"`
-}
+## 16. Mapping between layers
 
-type TaskResponse struct {
-    ID        uint      `json:"id"`
-    Title     string    `json:"title"`
-    CreatedAt time.Time `json:"created_at"`
+Recommended mapping:
+
+```text
+GraphQL Input
+    |
+    v
+Service Input
+    |
+    v
+Entity / Repository
+    |
+    v
+Service Result
+    |
+    v
+GraphQL Model
+```
+
+Not every feature requires a separate struct at every arrow.
+
+The architectural rule is about **ownership and dependency**, not mechanical DTO
+proliferation.
+
+Create a mapping when:
+
+- the GraphQL field shape differs from persistence;
+- IDs require conversion;
+- GraphQL enum names differ from stored values;
+- internal fields must not be exposed;
+- derived/computed fields exist;
+- mutation inputs do not match entity structure.
+
+---
+
+## 17. GraphQL error contract
+
+GraphQL errors should use stable machine-readable error codes in `extensions`.
+
+Example response:
+
+```json
+{
+  "data": {
+    "task": null
+  },
+  "errors": [
+    {
+      "message": "task was not found",
+      "path": ["task"],
+      "extensions": {
+        "code": "NOT_FOUND",
+        "request_id": "01J..."
+      }
+    }
+  ]
 }
 ```
 
-Never bind HTTP input directly into a GORM entity.
+Recommended application-to-GraphQL mapping:
+
+| Application error | GraphQL `extensions.code` |
+| --- | --- |
+| validation | `BAD_USER_INPUT` |
+| unauthenticated | `UNAUTHENTICATED` |
+| forbidden | `FORBIDDEN` |
+| not found | `NOT_FOUND` |
+| conflict | `CONFLICT` |
+| rate limited | `RATE_LIMITED` |
+| dependency busy | `DEPENDENCY_BUSY` |
+| unexpected | `INTERNAL_SERVER_ERROR` |
+
+### Error rules
+
+- application errors remain independent from GraphQL;
+- map errors at the GraphQL boundary;
+- never expose raw GORM errors;
+- never expose raw SQLite errors;
+- never expose stack traces;
+- never expose filesystem paths or secrets;
+- unexpected errors should return a safe public message;
+- log unexpected errors once with request/operation context.
+
+Use a centralized gqlgen error presenter.
+
+Conceptually:
+
+```go
+srv.SetErrorPresenter(func(ctx context.Context, err error) *gqlerror.Error {
+    return graphqlerror.Present(ctx, err)
+})
+```
+
+Use a centralized recovery function for unexpected panics.
+
+---
+
+## 18. GraphQL HTTP status behavior
+
+Do not recreate the REST response-envelope architecture inside GraphQL.
+
+GraphQL responses naturally use:
+
+```json
+{
+  "data": {},
+  "errors": []
+}
+```
+
+A successfully parsed/executed GraphQL HTTP request may contain GraphQL errors while the
+HTTP layer itself remains successful.
+
+Therefore:
+
+```text
+HTTP status
+    -> transport/protocol condition
+
+GraphQL errors[]
+    -> operation/field/application condition
+```
+
+Do not force application errors into REST-style envelopes such as:
+
+```json
+{
+  "data": null,
+  "error": {}
+}
+```
+
+inside GraphQL.
+
+---
+
+## 19. DataLoader and N+1 prevention
+
+GraphQL makes it easy to create N+1 database queries.
+
+Example schema:
+
+```graphql
+type Task {
+  owner: User!
+}
+```
+
+A naive owner resolver can execute one user query per task.
 
 Avoid:
 
-```go
-var task entity.Task
-_ = ctx.ShouldBindJSON(&task)
+```text
+tasks query:        1 query
+owner field task 1: 1 query
+owner field task 2: 1 query
+owner field task 3: 1 query
+...
 ```
 
-Use:
+Use request-scoped DataLoaders for relation fields where batching materially reduces
+queries.
 
-```go
-var req schema.CreateTaskRequest
-_ = ctx.ShouldBindJSON(&req)
+Desired behavior:
+
+```text
+tasks query:          1 query
+users by owner IDs:   1 batched query
 ```
 
-Then let the service construct or modify domain state.
+### DataLoader rules
+
+1. DataLoaders are request-scoped.
+2. Do not keep a global DataLoader cache across users/requests.
+3. Batch repository methods should accept `context.Context`.
+4. DataLoader keys must preserve requested ordering.
+5. Authorization must not be bypassed by batching.
+6. DataLoaders optimize retrieval; they do not own business rules.
+7. Do not introduce a loader for every field automatically.
+
+Example repository API:
+
+```go
+GetByIDs(ctx context.Context, ids []uint) ([]*entity.User, error)
+```
 
 ---
 
-## 8. Services
+## 20. Pagination
 
-Services implement use cases.
+Never expose unbounded production list fields.
 
-They own:
+Avoid:
 
-- business invariants;
-- authorization decisions;
-- orchestration across repositories;
-- interaction with external services;
-- transaction boundaries;
-- mapping domain results into response-ready application values where appropriate.
-
-Example interface consumed by a controller:
-
-```go
-type TaskService interface {
-    Create(
-        ctx context.Context,
-        actorID uint,
-        req schema.CreateTaskRequest,
-    ) (*schema.TaskResponse, error)
+```graphql
+type Query {
+  tasks: [Task!]!
 }
 ```
 
-Example repository interface consumed by a service:
+Prefer:
 
-```go
-type TaskRepository interface {
-    Create(ctx context.Context, task *entity.Task) error
-    GetByID(ctx context.Context, id uint) (*entity.Task, error)
+```graphql
+type Query {
+  tasks(first: Int = 20, after: String): TaskConnection!
 }
 ```
 
-Interfaces should normally be declared by the package that consumes them.
+Initial rules:
 
-That means the service package usually owns the repository interface it needs.
+```text
+default page size: 20
+maximum page size: 100
+```
+
+The exact limits should be configurable or centrally defined.
+
+Prefer cursor pagination for public GraphQL APIs where list stability matters.
+
+Connection shape:
+
+```graphql
+type TaskConnection {
+  nodes: [Task!]!
+  pageInfo: PageInfo!
+}
+
+type PageInfo {
+  hasNextPage: Boolean!
+  endCursor: String
+}
+```
+
+Cursor internals should be treated as opaque by clients.
 
 ---
 
-## 9. Transactions
+## 21. Query complexity and abuse controls
 
-The service layer owns transaction boundaries because it understands the complete use case.
+A GraphQL endpoint should not allow arbitrarily expensive operations.
 
-The repository layer executes persistence operations inside the transaction supplied by the application transaction mechanism.
+Production controls should include:
 
-A transaction manager abstraction is preferred over exposing GORM transactions directly to services.
+- maximum request body size;
+- GraphQL operation complexity limit;
+- pagination limits;
+- authentication-aware rate limits;
+- timeouts/cancellation;
+- bounded resolver work;
+- DataLoader batching;
+- limits on expensive search/filter operations.
 
-Example conceptual API:
+Example conceptual server setup:
+
+```go
+srv := handler.New(
+    generated.NewExecutableSchema(
+        generated.Config{
+            Resolvers: resolver,
+        },
+    ),
+)
+
+srv.Use(extension.Introspection{})
+srv.Use(extension.FixedComplexityLimit(250))
+```
+
+The complexity value must be tuned from actual schema/workload behavior rather than
+treated as universal.
+
+For production, introspection policy should be an explicit product/security decision.
+
+---
+
+## 22. GraphQL directives
+
+Directives are appropriate for cross-cutting GraphQL behavior.
+
+Examples:
+
+```graphql
+directive @auth on FIELD_DEFINITION
+directive @hasRole(role: Role!) on FIELD_DEFINITION
+```
+
+Potential uses:
+
+- broad authentication requirements;
+- broad role requirements;
+- field-level metadata;
+- declarative transport concerns.
+
+Do not place complicated domain authorization into directives.
+
+Avoid:
+
+```text
+directive
+    -> query database
+    -> evaluate complete resource ownership policy
+    -> mutate domain state
+```
+
+Prefer:
+
+```text
+directive
+    -> broad access guard
+
+service
+    -> complete domain authorization
+```
+
+---
+
+## 23. Custom scalars
+
+Use custom scalars only when they improve the API contract.
+
+Common examples:
+
+```graphql
+scalar DateTime
+scalar UUID
+```
+
+Scalar code owns transport parsing/serialization.
+
+It must not contain database logic.
+
+Example DateTime mapping responsibility:
+
+```text
+GraphQL string
+   <->
+time.Time
+```
+
+Keep custom scalar implementations in:
+
+```text
+internal/graphql/scalar
+```
+
+---
+
+## 24. Transactions
+
+The service layer owns transaction boundaries because it understands the complete use
+case.
+
+Do not start transactions in resolvers.
+
+Preferred abstraction:
 
 ```go
 type TransactionManager interface {
@@ -735,394 +1251,118 @@ err := txManager.WithinTransaction(ctx, func(txCtx context.Context) error {
 })
 ```
 
-This keeps GORM transaction objects out of the business-service API.
+This keeps GORM transaction objects out of resolver and service APIs.
 
 ---
 
-## 10. Uber Fx dependency injection
+## 25. SQLite strategy
 
-Fx is the dependency graph and lifecycle framework.
+SQLite remains the primary database.
 
-Use it to construct:
-
-- configuration;
-- logger;
-- database;
-- repositories;
-- services;
-- controllers;
-- middleware;
-- router;
-- HTTP server;
-- long-running workers.
-
-### 10.1 Module pattern
-
-Each substantial package may expose a module.
-
-Example:
-
-```go
-var Module = fx.Module(
-    "task-repository",
-    fx.Provide(New),
-)
-```
-
-Service:
-
-```go
-var Module = fx.Module(
-    "task-service",
-    fx.Provide(New),
-)
-```
-
-Controller:
-
-```go
-var Module = fx.Module(
-    "task-controller",
-    fx.Provide(New),
-)
-```
-
-### 10.2 Constructors remain ordinary Go
-
-Business constructors should still be directly callable in tests.
-
-Prefer:
-
-```go
-func New(repo TaskRepository, logger *zap.Logger) *Service {
-    return &Service{
-        repo:   repo,
-        logger: logger,
-    }
-}
-```
-
-Do not require an Fx application just to instantiate a service in a unit test.
-
-### 10.3 `fx.In` and `fx.Out`
-
-Use parameter/result objects when constructor dependency lists become large or when a module naturally benefits from Fx annotations.
-
-Example:
-
-```go
-type Params struct {
-    fx.In
-
-    DB     *gorm.DB
-    Logger *zap.Logger
-}
-```
-
-Do not introduce `fx.In` mechanically into every constructor.
-
-### 10.4 `fx.Invoke`
-
-Use `fx.Invoke` sparingly.
-
-Good uses include:
-
-- registering routes when registration is side-effect based;
-- ensuring the HTTP server root is instantiated;
-- starting a worker root;
-- wiring lifecycle-owned roots.
-
-Do not use `fx.Invoke` as a substitute for normal dependency construction.
-
----
-
-## 11. HTTP server and Fx lifecycle
-
-`internal/server` owns `http.Server`.
-
-The server should use Fx lifecycle hooks.
-
-Conceptual pattern:
-
-```go
-func RegisterLifecycle(
-    lc fx.Lifecycle,
-    srv *http.Server,
-    logger *zap.Logger,
-) {
-    lc.Append(fx.Hook{
-        OnStart: func(ctx context.Context) error {
-            go func() {
-                if err := srv.ListenAndServe(); err != nil &&
-                    !errors.Is(err, http.ErrServerClosed) {
-                    logger.Error("http server failed", zap.Error(err))
-                }
-            }()
-            return nil
-        },
-        OnStop: func(ctx context.Context) error {
-            return srv.Shutdown(ctx)
-        },
-    })
-}
-```
-
-Fx lifecycle hooks should start or stop work; they should not block forever.
-
----
-
-## 12. Router
-
-The router package defines endpoint registration and route groups.
-
-Example:
-
-```go
-api := engine.Group("/api/v1")
-
-api.GET("/health/live", healthController.Live)
-api.GET("/health/ready", healthController.Ready)
-
-public := api.Group("")
-public.POST("/sessions", sessionController.Create)
-
-authenticated := api.Group("")
-authenticated.Use(authMiddleware.RequireUser())
-authenticated.GET("/tasks/:id", taskController.Get)
-
-admin := api.Group("/admin")
-admin.Use(
-    authMiddleware.RequireUser(),
-    authMiddleware.RequireRole("admin"),
-)
-admin.DELETE("/tasks/:id", taskController.Delete)
-```
-
-Route middleware establishes broad access and request identity.
-
-Resource-specific authorization still belongs in services.
-
----
-
-## 13. Controllers
-
-Controllers translate HTTP into an application operation.
-
-A controller should normally:
-
-1. bind input;
-2. validate input;
-3. obtain authenticated identity;
-4. call one service use case;
-5. map the result through centralized response handling.
-
-Example:
-
-```go
-func (c *TaskController) Create(ctx *gin.Context) {
-    var req schema.CreateTaskRequest
-    if !handler.BindAndValidate(ctx, &req) {
-        return
-    }
-
-    actorID := middleware.ActorID(ctx)
-
-    result, err := c.tasks.Create(
-        ctx.Request.Context(),
-        actorID,
-        req,
-    )
-
-    handler.Respond(ctx, err, result)
-}
-```
-
-Controllers must not:
-
-- issue GORM queries;
-- call SQLite directly;
-- coordinate complex workflows;
-- implement reusable business policy.
-
----
-
-## 14. HTTP response contract
-
-Use one stable response format.
-
-Success:
-
-```json
-{
-  "data": {},
-  "error": null,
-  "request_id": "01J..."
-}
-```
-
-Error:
-
-```json
-{
-  "data": null,
-  "error": {
-    "code": "task_not_found",
-    "message": "task was not found",
-    "fields": []
-  },
-  "request_id": "01J..."
-}
-```
-
-Never expose:
-
-- raw GORM errors;
-- raw SQLite errors;
-- stack traces;
-- internal filesystem paths;
-- tokens;
-- secrets;
-- dependency credentials.
-
----
-
-## 15. Application error taxonomy
-
-Application errors should be independent from HTTP.
-
-| Category | HTTP status | Retryable |
-| --- | ---: | --- |
-| validation | 400 / 422 | no |
-| unauthenticated | 401 | after auth |
-| forbidden | 403 | no |
-| not found | 404 | no |
-| conflict | 409 | depends |
-| rate limited | 429 | yes |
-| database busy | 503 or controlled retry | yes |
-| dependency unavailable | 503 | yes |
-| unexpected | 500 | maybe |
-
-Centralize HTTP error mapping in `internal/handler`.
-
-Unexpected errors should normally be logged once at the HTTP boundary with the request ID and wrapped internal cause.
-
----
-
-## 16. Middleware order
-
-Install middleware deliberately.
-
-Recommended order:
+Recommended development path:
 
 ```text
-request ID
--> recovery
--> security headers
--> access logging
--> metrics/tracing when introduced
--> body-size limit
--> CORS when required
--> authentication
--> route handler
+./data/app.db
 ```
 
-The logger middleware should enrich logs with fields such as:
-
-- request ID;
-- method;
-- route template;
-- status;
-- duration;
-- remote IP when appropriate;
-- actor/user ID when safe;
-- error code.
-
-Use the Gin route template where possible instead of raw resource IDs for metric labels.
-
----
-
-## 17. Zap logging conventions
-
-Use structured logs.
-
-Prefer:
-
-```go
-logger.Info(
-    "task created",
-    zap.Uint("task_id", task.ID),
-    zap.Uint("actor_id", actorID),
-)
-```
-
-Avoid:
-
-```go
-logger.Info(fmt.Sprintf("task %d created by %d", task.ID, actorID))
-```
-
-### Standard fields
-
-Where applicable:
+Recommended production mounted path:
 
 ```text
-service
-version
-environment
-request_id
-trace_id
-actor_id
-method
-route
-status
-duration
-error_code
+/data/app.db
 ```
 
-### Logging rules
+### WAL
 
-- never log passwords;
-- never log auth tokens;
-- avoid logging full request bodies by default;
-- do not log secrets from configuration;
-- do not log the same error at every layer;
-- add context as an error travels upward, then log at the boundary responsible for handling it.
+Enable:
 
----
+```sql
+PRAGMA journal_mode=WAL;
+```
 
-## 18. GORM logger integration
+### Foreign keys
 
-GORM logging should integrate with the application logging policy rather than becoming an independent noisy logging subsystem.
+Enable:
 
-Desired behavior:
+```sql
+PRAGMA foreign_keys=ON;
+```
 
-- development: SQL logging may be enabled at an appropriate level;
-- production: default to warnings/errors and slow-query visibility;
-- attach request context where practical;
-- never log sensitive SQL parameters indiscriminately;
-- avoid duplicate application-error and SQL-error logs.
+### Busy timeout
 
-A small adapter around GORM's logger interface may be created if required so database logs flow into Zap consistently.
-
-Keep this adapter in `internal/database` or `internal/observability`, not in repositories.
-
----
-
-## 19. Database migrations with Goose
-
-**Goose is the official migration system for this project.**
-
-GORM is responsible for runtime persistence and object mapping. Goose is responsible for evolving the database schema over time.
+Start with a bounded configurable value, for example:
 
 ```text
-GORM models       -> runtime mapping / queries
-Goose migrations  -> schema history / deployment changes
-SQLite            -> database
+5 seconds
 ```
 
-Do **not** use GORM `AutoMigrate` as the production deployment migration system. `AutoMigrate` may be used for disposable test databases or short-lived prototypes, but production schema changes must be explicit, versioned, reviewable, and reproducible through Goose.
+### Connection pool
 
-### 19.1 Migration layout
+Use conservative values appropriate for SQLite:
+
+```text
+MaxOpenConns: small
+MaxIdleConns: small
+```
+
+Measure before increasing write concurrency.
+
+The existing deployment constraint remains:
+
+```text
+prefer one application instance
+    +
+persistent local/attached storage
+```
+
+Do not treat a shared SQLite file as a horizontally scaled multi-writer database.
+
+---
+
+## 26. GORM rules
+
+GORM remains confined to database/repository code.
+
+Every repository operation should propagate context:
+
+```go
+db.WithContext(ctx)
+```
+
+Persistence errors should be translated into stable application errors:
+
+```text
+record not found
+    -> ErrNotFound
+
+unique constraint
+    -> ErrConflict
+
+busy/locked
+    -> ErrDependencyBusy
+
+unexpected DB failure
+    -> wrapped internal error
+```
+
+Raw GORM/SQLite errors must never reach GraphQL clients.
+
+---
+
+## 27. Goose migrations
+
+Goose remains the official database migration system.
+
+```text
+GORM models
+    -> runtime object mapping and queries
+
+Goose SQL migrations
+    -> schema history and deployment changes
+```
+
+Do not use GORM `AutoMigrate` as the production migration mechanism.
+
+Migration layout:
 
 ```text
 internal/migrations/
@@ -1132,29 +1372,7 @@ internal/migrations/
     └── 00003_add_task_indexes.sql
 ```
 
-Each Goose SQL migration contains both the forward and rollback operations when a safe rollback is possible.
-
-Example:
-
-```sql
--- +goose Up
-CREATE TABLE tasks (
-    id TEXT PRIMARY KEY,
-    title TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'pending',
-    created_at DATETIME NOT NULL,
-    updated_at DATETIME NOT NULL
-);
-
-CREATE INDEX idx_tasks_status ON tasks(status);
-
--- +goose Down
-DROP TABLE tasks;
-```
-
-### 19.2 Migration commands
-
-Expose the common Goose operations through the `Makefile` so developers and CI use the same commands.
+Typical Makefile targets:
 
 ```makefile
 DB_PATH ?= ./data/app.db
@@ -1176,346 +1394,56 @@ migrate-validate:
 	goose -dir $(MIGRATIONS_DIR) sqlite3 $(DB_PATH) validate
 ```
 
-Typical usage:
-
-```bash
-make migrate-create name=create_users
-make migrate-up
-make migrate-status
-```
-
-The migration command must receive the same database path/configuration used by the application for the target environment. Do not hard-code production database locations into migration files or scripts.
-
-### 19.3 Deployment policy
-
-Migrations are an explicit release operation. Do not have every Fx application process automatically execute pending migrations during normal startup.
-
-Preferred deployment flow:
+Deployment:
 
 ```text
-build artifact
-    -> back up database when required
-    -> run Goose migrations once
-    -> start/restart application
-    -> readiness succeeds
-```
-
-For a single-instance deployment, a dedicated deploy command or release script may run Goose immediately before starting the new application version. If multiple replicas are introduced later, only one release/migration job should apply migrations.
-
-### 19.4 Migration rules
-
-- use one migration per logical schema change;
-- never edit a migration already applied in a shared environment;
-- create a new migration to correct or extend an existing one;
-- test the complete migration chain against SQLite in CI;
-- test both a clean install and upgrades from supported existing schemas;
-- back up production data before destructive or high-risk migrations;
-- use transactions where SQLite and the migration operation safely support them;
-- account for SQLite table-rebuild requirements for unsupported `ALTER TABLE` operations;
-- keep application code compatible with staged migrations when a schema change cannot be deployed atomically;
-- write `Down` migrations only when rollback is actually safe; an unsafe rollback should be documented rather than pretending it is reversible.
-
-### 19.5 `AutoMigrate` policy
-
-Allowed:
-
-```text
-repository unit/integration test setup with a disposable database
-throwaway local prototypes
-```
-
-Not allowed:
-
-```text
-production application startup
-shared development/staging environments
-release deployment schema management
-```
-
-The rule is:
-
-> **GORM models describe how application code accesses data. Goose migrations define how the database schema changes.**
-
----
-
-## 20. Database backup policy
-
-Because SQLite stores application state in files, backup policy is part of database architecture.
-
-Minimum expectations:
-
-- database lives on persistent storage;
-- automated backups exist for production;
-- backup and restore procedures are tested;
-- WAL-aware backup procedures are used;
-- destructive migrations require a recent verified backup;
-- database path and backup location are configurable.
-
-Never treat copying an actively changing database file blindly as a guaranteed consistent backup strategy.
-
----
-
-## 21. Authentication and security baseline
-
-When authentication is introduced:
-
-- validate token signature, issuer, audience, expiry, and algorithm;
-- use secure cookie flags for cookie-based auth;
-- use CSRF protection for cookie-authenticated state changes;
-- restrict CORS to known origins;
-- configure Gin trusted proxies explicitly;
-- limit request body size;
-- rate-limit login, reset, registration, and expensive endpoints;
-- sanitize uploaded filenames and validate content;
-- store uploads outside the executable directory;
-- prevent personal data and secrets from entering logs;
-- use parameterized persistence operations through GORM;
-- keep dependencies and the Go toolchain patched.
-
-Authorization belongs at two levels:
-
-```text
-middleware -> broad route access
-service    -> resource/domain authorization
+build
+  -> backup when required
+  -> run Goose once
+  -> start/restart app
+  -> readiness succeeds
 ```
 
 ---
 
-## 22. Health endpoints
+## 28. Uber Fx module graph
 
-Expose separate health signals.
-
-```text
-GET /health/live
-GET /health/ready
-```
-
-### Liveness
-
-Answers:
-
-> Is the process alive?
-
-Do not perform expensive dependency checks.
-
-### Readiness
-
-Answers:
-
-> Can this process currently serve requests?
-
-Readiness may verify:
-
-- database initialization completed;
-- required application startup state exists;
-- the SQLite database is reachable and operational.
-
----
-
-## 23. Graceful shutdown
-
-Fx owns lifecycle orchestration.
-
-On shutdown:
-
-1. stop accepting new HTTP requests;
-2. allow in-flight requests to complete within the configured timeout;
-3. stop background workers;
-4. flush telemetry when present;
-5. sync Zap;
-6. close the underlying database connection.
-
-Long-running operations must accept cancellation via `context.Context`.
-
----
-
-## 24. Background work
-
-Controllers must not launch unmanaged goroutines for durable work.
-
-For small non-durable asynchronous tasks, lifecycle-aware workers may be introduced carefully.
-
-For durable jobs later:
-
-- use a durable queue;
-- assign idempotency keys;
-- define retry limits;
-- use exponential backoff with jitter;
-- distinguish retryable and permanent failures;
-- provide operational visibility;
-- make handlers safe to execute more than once.
-
-The queue implementation is intentionally not selected yet.
-
----
-
-## 25. Testing strategy
-
-Use the narrowest test that proves behavior.
-
-| Layer | Test style | Main assertions |
-| --- | --- | --- |
-| service | unit with fakes/mocks | business rules and error paths |
-| repository | integration with SQLite | queries, constraints, transactions |
-| controller | `httptest` | binding, status, response contract |
-| middleware | `httptest` | context, headers, rejection behavior |
-| migrations | integration | clean install and upgrade path |
-| app | small end-to-end suite | critical user journeys |
-
-### 25.1 Service tests
-
-Service tests should not require:
-
-- Fx;
-- Gin;
-- GORM;
-- SQLite.
-
-Example:
+Recommended top-level composition:
 
 ```go
-repo := &FakeTaskRepository{}
-service := taskservice.New(repo, zap.NewNop())
+var Module = fx.Module(
+    "app",
+    config.Module,
+    observability.Module,
+    database.Module,
+    repository.Module,
+    service.Module,
+    graphql.Module,
+    middleware.Module,
+    router.Module,
+    server.Module,
+)
 ```
 
-### 25.2 Repository tests
-
-Use real SQLite.
-
-Prefer a temporary file database when behavior involving WAL, file locking, or persistence matters.
-
-Use an in-memory database when the behavior being tested does not depend on filesystem semantics.
-
-### 25.3 Determinism
-
-Inject where useful:
-
-- clock;
-- ID generator;
-- external clients.
-
-Do not mock everything. Repository tests should prove actual database behavior.
-
-### 25.4 CI test commands
-
-At minimum:
+GraphQL module:
 
 ```text
-go test ./...
-go test -race ./...
-go vet ./...
+graphql.Module
+│
+├── resolver.Module
+├── dataloader.Module
+├── directive providers
+├── GraphQL executable schema
+└── GraphQL handler
 ```
 
-Add linting and vulnerability scanning as the project matures.
-
----
-
-## 26. Fx testing rule
-
-Fx should not be part of most unit tests.
-
-Use Fx tests only to prove the application graph is valid or to exercise lifecycle composition.
-
-A useful architecture test should ensure:
-
-- all required dependencies can be resolved;
-- constructors do not conflict;
-- modules compose successfully;
-- lifecycle hooks can start/stop in a controlled test environment.
-
-Business rules remain ordinary Go tests.
-
----
-
-## 27. Build and deployment baseline
-
-CI should eventually run:
-
-```text
-go mod verify
-go vet ./...
-static analysis / lint
-go test -race ./...
-integration tests
-goose migration validation
-go build ./cmd/api
-vulnerability scan
-container build
-container scan
-```
-
-Because the official GORM SQLite driver requires CGO, the build pipeline must include the required C toolchain.
-
-A multi-stage container build is recommended.
-
-Runtime requirements:
-
-- non-root user where possible;
-- writable mounted directory for SQLite;
-- stdout/stderr logging;
-- minimal runtime image compatible with the CGO-linked binary;
-- explicit health checks;
-- graceful termination support.
-
----
-
-## 28. Production SQLite deployment model
-
-Preferred initial deployment:
-
-```text
-               ┌───────────────────┐
-Internet ----> │ Go API process    │
-               │ Gin + Fx          │
-               │ GORM              │
-               └─────────┬─────────┘
-                         │
-                         v
-               ┌───────────────────┐
-               │ local persistent  │
-               │ SQLite database   │
-               │ /data/app.db      │
-               └───────────────────┘
-```
-
-Prefer one application instance with durable local or attached block storage unless the architecture is deliberately extended for replicated/multi-writer operation.
-
-Do not assume a shared SQLite file is a substitute for a client/server database in horizontally scaled multi-host deployments.
-
-If the product eventually requires high concurrent writes or multiple independent application replicas writing concurrently, the repository boundary should make migration to PostgreSQL substantially easier.
-
----
-
-## 29. Initial Fx module graph
-
-```text
-app.Module
-│
-├── config.Module
-├── observability.Module
-├── database.Module
-│
-├── repository.Module
-│   └── taskrepo.Module
-│
-├── service.Module
-│   └── taskservice.Module
-│
-├── controller.Module
-│   └── taskcontroller.Module
-│
-├── middleware.Module
-├── router.Module
-└── server.Module
-```
-
-Dependency graph:
+Application graph:
 
 ```text
 Config
- ├───────────────> Zap Logger
- ├───────────────> GORM / SQLite
- └───────────────> HTTP Server
+  ├──────────────> Zap
+  ├──────────────> GORM / SQLite
+  └──────────────> HTTP Server
 
 GORM / SQLite
       |
@@ -1526,10 +1454,16 @@ Repositories
 Services
       |
       v
-Controllers
+Resolver root
       |
       v
-Router / Gin
+gqlgen executable schema
+      |
+      v
+GraphQL handler
+      |
+      v
+Gin router
       |
       v
 HTTP Server
@@ -1537,324 +1471,934 @@ HTTP Server
 
 ---
 
-## 30. Example feature flow
+## 29. Example Fx constructors
 
-For a `task` feature:
+Resolver module:
+
+```go
+var Module = fx.Module(
+    "graphql-resolver",
+    fx.Provide(New),
+)
+```
+
+GraphQL handler:
+
+```go
+func NewHandler(
+    resolver *resolver.Resolver,
+) http.Handler {
+    schema := generated.NewExecutableSchema(
+        generated.Config{
+            Resolvers: resolver,
+        },
+    )
+
+    srv := handler.NewDefaultServer(schema)
+
+    return srv
+}
+```
+
+Router receives the already-constructed handler:
+
+```go
+func NewRouter(
+    gql http.Handler,
+    logger *zap.Logger,
+) *gin.Engine {
+    engine := gin.New()
+
+    // middleware...
+
+    engine.POST("/graphql", gin.WrapH(gql))
+
+    return engine
+}
+```
+
+Constructors should remain ordinary Go functions that can be called without Fx in tests.
+
+---
+
+## 30. HTTP server lifecycle
+
+`internal/server` continues to own `http.Server`.
+
+Conceptual constructor:
+
+```go
+func New(
+    cfg config.Config,
+    router *gin.Engine,
+) *http.Server {
+    return &http.Server{
+        Addr:         cfg.HTTP.Address,
+        Handler:      router,
+        ReadTimeout:  cfg.HTTP.ReadTimeout,
+        WriteTimeout: cfg.HTTP.WriteTimeout,
+        IdleTimeout:  cfg.HTTP.IdleTimeout,
+    }
+}
+```
+
+Use Fx lifecycle hooks for start/stop.
+
+On shutdown:
+
+1. stop accepting new HTTP requests;
+2. allow in-flight GraphQL operations to finish within timeout;
+3. cancel remaining request contexts;
+4. stop background workers;
+5. flush telemetry;
+6. sync Zap;
+7. close the database.
+
+---
+
+## 31. Middleware order
+
+Recommended Gin middleware order:
 
 ```text
-POST /api/v1/tasks
-        |
-        v
-request ID middleware
-        |
-        v
-auth middleware
-        |
-        v
-TaskController.Create
-        |
-        v
+request ID
+-> recovery
+-> security headers
+-> access logging
+-> tracing/metrics when introduced
+-> body-size limit
+-> CORS
+-> authentication extraction
+-> DataLoader injection when implemented at HTTP boundary
+-> gqlgen handler
+```
+
+Prefer DataLoader setup that is clearly request scoped.
+
+Useful access-log fields:
+
+```text
+request_id
+method
+route
+status
+duration
+actor_id
+graphql_operation_name
+graphql_operation_type
+error_code
+```
+
+Do not log full GraphQL variables by default because they may contain secrets or
+personal data.
+
+---
+
+## 32. GraphQL operation logging
+
+HTTP logging alone sees mostly:
+
+```text
+POST /graphql
+```
+
+That is not enough operational context.
+
+Where practical, enrich request context/logging with:
+
+```text
+operation_name
+operation_type
+```
+
+Example:
+
+```text
+graphql.operation_name = CreateTask
+graphql.operation_type = mutation
+```
+
+Avoid high-cardinality labels based on entire query documents.
+
+Do not log full query documents in production by default.
+
+---
+
+## 33. Security baseline
+
+When authentication is enabled:
+
+- validate credential signature, issuer, audience, expiry, and algorithm where applicable;
+- use secure cookie flags for cookie-based authentication;
+- use CSRF protections when cookie authentication makes them necessary;
+- restrict CORS to known origins;
+- configure Gin trusted proxies explicitly;
+- enforce request body limits;
+- rate-limit authentication and expensive operations;
+- enforce GraphQL query complexity limits;
+- enforce pagination bounds;
+- avoid logging GraphQL variables by default;
+- prevent secrets and personal data from entering logs;
+- use service-level authorization;
+- keep dependencies and the Go toolchain patched.
+
+Do not assume GraphQL automatically protects against expensive queries.
+
+---
+
+## 34. Health endpoints stay outside GraphQL
+
+Keep health probes as ordinary HTTP endpoints.
+
+```text
+GET /health/live
+GET /health/ready
+```
+
+Do not model Kubernetes/container health as:
+
+```graphql
+query {
+  health
+}
+```
+
+Liveness answers:
+
+```text
+Is the process alive?
+```
+
+Readiness answers:
+
+```text
+Can this process currently serve requests?
+```
+
+Readiness may verify:
+
+- database initialization;
+- SQLite connectivity;
+- required startup state.
+
+---
+
+## 35. GraphQL playground
+
+Development may expose a GraphQL playground on:
+
+```text
+GET /graphql
+```
+
+or:
+
+```text
+GET /playground
+```
+
+Production exposure should be explicitly configured.
+
+Conceptual:
+
+```go
+if cfg.Environment == "development" {
+    engine.GET("/graphql", gin.WrapH(playground.Handler(
+        "GraphQL Playground",
+        "/graphql",
+    )))
+}
+```
+
+Do not accidentally couple production API availability to playground availability.
+
+---
+
+## 36. Testing strategy
+
+Use the narrowest test that proves behavior.
+
+| Layer | Test style | Main assertions |
+| --- | --- | --- |
+| service | unit with fakes/mocks | business rules, authorization, error paths |
+| repository | integration with SQLite | queries, constraints, batch methods, transactions |
+| resolver | unit/integration | input mapping, service call, output mapping |
+| GraphQL operation | HTTP/GraphQL integration | schema execution, errors, auth, nullability |
+| DataLoader | unit/integration | batching, ordering, request isolation |
+| middleware | `httptest` | identity/context/headers/rejection |
+| migrations | SQLite integration | clean install and upgrade path |
+| app | small end-to-end suite | critical GraphQL journeys |
+
+### Service tests
+
+Service tests should not require:
+
+- Fx;
+- Gin;
+- gqlgen;
+- GORM;
+- SQLite.
+
+Example:
+
+```go
+repo := &FakeTaskRepository{}
+svc := taskservice.New(repo, zap.NewNop())
+```
+
+### Resolver tests
+
+Resolvers may be tested with a fake service:
+
+```go
+resolver := resolver.New(fakeTaskService, zap.NewNop())
+```
+
+Test transport mapping without a real DB.
+
+### GraphQL integration tests
+
+Use the real executable schema for important operation-level behavior.
+
+Example targets:
+
+```graphql
+mutation CreateTask($input: CreateTaskInput!) {
+  createTask(input: $input) {
+    id
+    title
+  }
+}
+```
+
+Assert:
+
+- returned `data`;
+- `errors`;
+- `extensions.code`;
+- authorization;
+- nullability;
+- pagination behavior.
+
+### Repository tests
+
+Use real SQLite.
+
+Batch methods used by DataLoaders require integration tests.
+
+---
+
+## 37. GraphQL schema tests
+
+Schema changes are API changes.
+
+CI should catch unintended generated/schema drift.
+
+Recommended checks:
+
+```text
+go test ./...
+go test -race ./...
+go vet ./...
+gqlgen generate
+git diff --exit-code
+```
+
+As the project matures, consider schema compatibility checks for breaking changes.
+
+At minimum, review changes that:
+
+- remove fields;
+- change nullable to non-null in unsafe ways;
+- change argument types;
+- remove enum values;
+- change input requirements;
+- alter pagination conventions.
+
+---
+
+## 38. Build and deployment baseline
+
+CI should eventually run:
+
+```text
+go mod verify
+gqlgen generate
+generated-code drift check
+go vet ./...
+static analysis / lint
+go test -race ./...
+repository integration tests
+GraphQL integration tests
+Goose migration validation
+go build ./cmd/api
+vulnerability scan
+container build
+container scan
+```
+
+Runtime requirements remain:
+
+- non-root user where possible;
+- writable mounted SQLite directory;
+- stdout/stderr structured logging;
+- explicit health checks;
+- graceful termination;
+- production request limits.
+
+---
+
+## 39. Example Task feature flow
+
+GraphQL operation:
+
+```graphql
+mutation CreateTask($input: CreateTaskInput!) {
+  createTask(input: $input) {
+    id
+    title
+    status
+  }
+}
+```
+
+Execution:
+
+```text
+POST /graphql
+     |
+     v
+Gin request ID
+     |
+     v
+Gin auth extraction
+     |
+     v
+gqlgen
+     |
+     v
+Mutation.createTask resolver
+     |
+     v
 TaskService.Create
-        |
-        v
+     |
+     v
 TaskRepository.Create
-        |
-        v
+     |
+     v
 GORM
-        |
-        v
+     |
+     v
 SQLite
 ```
 
 Responsibilities:
 
 ```text
-Controller
-  bind JSON
-  validate transport input
-  get actor ID
+Gin
+  establish HTTP/request context
+  broad authentication extraction
+  request limits
+
+gqlgen
+  parse/validate GraphQL document
+  execute operation
+  resolve fields
+
+Resolver
+  translate GraphQL input
+  get actor/request context
   call service
+  translate output
 
 Service
-  validate business rules
-  authorize actor
-  construct entity
-  own transaction decision
+  business validation
+  authorization
+  orchestration
+  transaction decision
 
 Repository
-  execute GORM operation
+  execute GORM operations
   translate persistence errors
 
-Handler
-  translate application error to HTTP
+GraphQL error presenter
+  map application errors
+  attach stable extensions.code
 ```
 
 ---
 
-## 31. Implementation order
+## 40. Example Task relation flow with DataLoader
 
-Build one vertical slice before adding optional infrastructure.
+Query:
+
+```graphql
+query Tasks {
+  tasks(first: 20) {
+    nodes {
+      id
+      title
+      owner {
+        id
+        name
+      }
+    }
+  }
+}
+```
+
+Desired flow:
+
+```text
+Query.tasks
+   |
+   v
+TaskService.List
+   |
+   v
+TaskRepository.List
+   |
+   v
+20 tasks
+   |
+   +----------------------------+
+                                |
+                                v
+                         Task.owner resolver
+                                |
+                                v
+                         User DataLoader
+                                |
+                                v
+                    UserRepository.GetByIDs
+                                |
+                                v
+                          one batch query
+```
+
+Avoid one owner query per task.
+
+---
+
+## 41. Implementation order
+
+Build one vertical GraphQL slice before adding optional infrastructure.
 
 ### Phase 1 — application shell
 
 1. initialize Go module;
 2. create `cmd/api`;
 3. add typed configuration;
-4. add Uber Fx root application;
-5. add Zap logger;
-6. add Gin server;
-7. add graceful start/stop lifecycle.
+4. add Uber Fx;
+5. add Zap;
+6. add Gin;
+7. add `http.Server`;
+8. add graceful lifecycle.
 
-### Phase 2 — persistence
+### Phase 2 — GraphQL shell
+
+1. add gqlgen;
+2. create `gqlgen.yml`;
+3. create `internal/graphql/schema`;
+4. create root `Query`;
+5. create root `Mutation`;
+6. generate gqlgen code;
+7. construct gqlgen handler through Fx;
+8. mount `POST /graphql` in Gin;
+9. add dev-only playground.
+
+At this point:
+
+```graphql
+query {
+  ping
+}
+```
+
+should work end-to-end.
+
+### Phase 3 — persistence
 
 1. add GORM;
 2. add SQLite driver;
-3. configure database path;
-4. enable required SQLite settings;
-5. create transaction manager;
-6. add Goose and create the first versioned SQL migration;
-7. add Makefile commands for Goose (`create`, `up`, `down`, `status`, `validate`);
-8. add readiness database check.
+3. configure SQLite;
+4. add transaction manager;
+5. add Goose;
+6. create first migration;
+7. add migration Makefile commands;
+8. add DB readiness check.
 
-### Phase 3 — first vertical feature
-
-Implement one resource end-to-end:
-
-```text
-schema
--> entity
--> repository
--> service
--> controller
--> route
-```
-
-Suggested first feature:
-
-```text
-Task
-```
+### Phase 4 — first GraphQL vertical slice
 
 Implement:
 
 ```text
-POST   /api/v1/tasks
-GET    /api/v1/tasks/:id
-GET    /api/v1/tasks
-PATCH  /api/v1/tasks/:id
-DELETE /api/v1/tasks/:id
+Task GraphQL schema
+-> Task resolver
+-> Task service
+-> Task repository
+-> GORM entity
+-> SQLite migration
 ```
 
-### Phase 4 — shared HTTP behavior
+Suggested API:
+
+```graphql
+type Query {
+  task(id: ID!): Task
+  tasks(first: Int = 20, after: String): TaskConnection!
+}
+
+type Mutation {
+  createTask(input: CreateTaskInput!): Task!
+  updateTask(id: ID!, input: UpdateTaskInput!): Task!
+  deleteTask(id: ID!): Boolean!
+}
+```
+
+### Phase 5 — GraphQL production baseline
 
 Add:
 
-- centralized response envelope;
-- application error model;
-- validation handling;
-- request ID;
-- recovery;
-- structured access logs;
-- body size limits;
-- security headers.
-
-### Phase 5 — testing baseline
-
-Add:
-
-- service unit tests;
-- repository SQLite integration tests;
-- controller tests;
-- middleware tests;
-- migration tests;
-- Fx graph smoke test.
+- centralized error presenter;
+- panic recovery;
+- request IDs;
+- operation logging;
+- pagination limits;
+- query complexity limit;
+- request body limit;
+- security headers;
+- CORS;
+- GraphQL integration tests.
 
 ### Phase 6 — authentication
 
-Add only after the core vertical slice is sound:
+Add:
 
 - identity model;
-- authentication middleware;
+- Gin authentication extraction;
+- actor request context;
+- optional broad `@auth` directive if useful;
 - service-level authorization;
-- auth rate limits;
-- security tests.
+- authentication/security tests.
 
-### Phase 7 — operational maturity
+### Phase 7 — DataLoaders
+
+Add DataLoaders only for relations that exhibit N+1 behavior.
+
+Start with actual measured/query-count evidence.
+
+### Phase 8 — operational maturity
 
 Add as required:
 
 - metrics;
-- OpenTelemetry tracing;
-- background queues;
+- OpenTelemetry;
+- tracing;
+- persistent query strategy;
 - caching;
-- external integrations;
-- richer health checks.
+- background queues;
+- subscriptions;
+- external integrations.
 
 ---
 
-## 32. Definition of done for a new endpoint
+## 42. Definition of done for a new GraphQL operation
 
-An endpoint is complete when:
+A new query or mutation is complete when:
 
-- its route is registered in the correct group;
-- request and response schemas are explicit;
-- input is validated;
-- body size constraints are appropriate;
-- controller contains only transport logic;
-- business logic lives in a service;
+- its schema is explicit;
+- nullable/non-null behavior is intentional;
+- input types are explicit;
+- list fields are bounded/paginated;
+- generated gqlgen code is current;
+- resolver contains only transport mapping;
+- service contains business behavior;
 - service accepts `context.Context`;
-- resource-level authorization is enforced where required;
-- persistence is behind a repository interface;
-- repository uses `WithContext` for GORM operations;
+- authorization is enforced where required;
+- persistence is behind repository interfaces;
+- repository uses `WithContext`;
 - persistence errors are translated;
-- no raw GORM or SQLite error reaches the client;
-- logs contain useful structured context;
-- success and expected failure paths are tested;
+- application errors map to stable GraphQL error codes;
+- raw GORM/SQLite errors cannot reach clients;
+- logging contains request/operation context;
+- expected success/error paths are tested;
 - required migration is included;
-- timeout/retry/idempotency behavior is defined when relevant.
+- N+1 behavior has been considered;
+- expensive-operation behavior is bounded.
 
 ---
 
-## 33. Architectural anti-patterns
+## 43. Architectural anti-patterns
 
-Avoid these patterns.
+### Fat resolver
 
-### Fat controller
+Avoid:
 
 ```go
-func Create(ctx *gin.Context) {
-    // bind
-    // query DB
-    // check permissions
-    // update multiple tables
-    // send external request
-    // build response
+func (r *mutationResolver) CreateTask(
+    ctx context.Context,
+    input model.CreateTaskInput,
+) (*model.Task, error) {
+    // inspect auth
+    // query GORM
+    // enforce permissions
+    // write multiple tables
+    // call external API
+    // construct response
 }
 ```
 
-Move orchestration into the service.
+Move business orchestration into a service.
 
-### GORM in service
+---
 
-```go
-type Service struct {
-    db *gorm.DB
-}
+### Resolver calling GORM
+
+Avoid:
+
+```text
+resolver -> *gorm.DB
 ```
 
-Prefer repository interfaces.
+Use:
 
-### Gin context in service
+```text
+resolver -> service -> repository
+```
+
+---
+
+### GraphQL models used as persistence entities
+
+Avoid:
 
 ```go
-func (s *Service) Create(ctx *gin.Context) error
+func (r *Repository) Create(ctx context.Context, task *model.Task) error
+```
+
+Prefer persistence/domain-owned types.
+
+---
+
+### GraphQL types leaking into services
+
+Avoid:
+
+```go
+func (s *Service) Create(
+    ctx context.Context,
+    input model.CreateTaskInput,
+) (*model.Task, error)
+```
+
+when `model` is gqlgen-generated transport code.
+
+Prefer:
+
+```go
+func (s *Service) Create(
+    ctx context.Context,
+    input task.CreateInput,
+) (*task.Task, error)
+```
+
+---
+
+### `gin.Context` inside resolvers/services
+
+Avoid:
+
+```go
+func (s *Service) Create(ctx *gin.Context, ...)
 ```
 
 Use:
 
 ```go
-func (s *Service) Create(ctx context.Context, ...) error
+func (s *Service) Create(ctx context.Context, ...)
 ```
-
-### Binding into entity
-
-```go
-ctx.ShouldBindJSON(&entity.Task{})
-```
-
-Bind into a schema DTO.
-
-### Global logger
-
-```go
-var Log = zap.NewNop()
-```
-
-Inject the application logger.
-
-### Fx everywhere
-
-Do not make every business type depend on `fx.In`, `fx.Out`, or `fx.Lifecycle`.
-
-Fx is primarily the composition framework.
-
-### Automatic schema mutation in production
-
-Do not let every application process run unconstrained `AutoMigrate` at startup.
-
-Use Goose-managed explicit versioned SQL migrations.
 
 ---
 
-## 34. Final technology decisions
+### Repository from DataLoader bypasses policy
 
-| Concern | Decision |
-| --- | --- |
-| Language | Go |
-| HTTP | Gin |
-| DI | Uber Fx |
-| Application lifecycle | Uber Fx |
-| ORM | GORM |
-| Database | SQLite |
-| SQLite driver | official GORM SQLite driver initially |
-| Logging | Uber Zap |
-| API structure | controller -> service -> repository |
-| Request DTOs | `internal/schema` |
-| Persistence models | `internal/entity` |
-| Configuration | typed startup configuration |
-| Migrations | Goose with explicit versioned SQL migrations |
-| Tests | unit + real SQLite integration + httptest |
-| Application code | `internal/` |
-| Public reusable code | `pkg/` only when genuinely reusable |
+Avoid using DataLoaders as a shortcut around authorization.
+
+DataLoader results must still be safe for the requesting actor/use case.
 
 ---
 
-## 35. Patterns retained from Apache Answer
+### Unbounded lists
 
-This project intentionally retains the following ideas from Apache Answer:
+Avoid:
 
-- small executable entry point under `cmd/`;
-- centralized HTTP server construction;
-- route groups separated by authentication level;
-- controller, service, repository, entity, and schema boundaries;
-- shared binding and response handling;
-- constructor-based dependency injection;
-- versioned database migrations;
-- `internal/` for application implementation;
-- `pkg/` only for genuinely reusable packages.
+```graphql
+tasks: [Task!]!
+```
 
-The implementation differs intentionally in these areas:
+for potentially large tables.
+
+Use pagination.
+
+---
+
+### Business errors encoded as ad-hoc strings
+
+Avoid clients depending on:
 
 ```text
-Apache Answer-inspired baseline      This project
-----------------------------------------------------------
-manual/Wire-style composition   ->   Uber Fx
-Answer persistence stack        ->   GORM
-server SQL database patterns    ->   SQLite
-migration mechanism             ->   Goose + versioned SQL
-existing logging setup          ->   Uber Zap
-large application subsystems    ->   only what this project needs
+"task not found"
 ```
 
-The architecture should remain smaller than Apache Answer until scale or product requirements justify additional infrastructure.
+Use stable:
+
+```json
+{
+  "extensions": {
+    "code": "NOT_FOUND"
+  }
+}
+```
 
 ---
 
-## 36. Core rule to remember
+### REST envelope inside GraphQL
 
-For almost every feature, the expected flow is:
+Avoid returning custom wrappers like:
+
+```graphql
+type CreateTaskPayload {
+  data: Task
+  error: APIError
+}
+```
+
+for every operation solely to imitate REST.
+
+Use GraphQL `data` + `errors` unless the domain genuinely requires a payload object.
+
+---
+
+### GraphQL directives as the whole authorization layer
+
+Avoid treating `@auth` as sufficient domain authorization.
+
+The service remains authoritative.
+
+---
+
+### Global DataLoader cache
+
+Avoid request-independent DataLoader caches unless explicitly designed with safe cache
+semantics.
+
+Default DataLoaders are request-scoped.
+
+---
+
+### Automatic schema migration
+
+Do not run unconstrained GORM `AutoMigrate` in production startup.
+
+Use Goose.
+
+---
+
+## 44. What remains from the previous REST-oriented architecture
+
+The following decisions remain unchanged from the existing architecture:
+
+- small `cmd/api/main.go`;
+- Uber Fx composition;
+- typed startup configuration;
+- Zap logging;
+- GORM repository boundary;
+- SQLite;
+- Goose migrations;
+- service-owned business logic;
+- service-owned transactions;
+- persistence entities separated from public API types;
+- health/readiness endpoints;
+- graceful shutdown;
+- repository integration tests;
+- production database backup rules.
+
+The existing document already established Gin, Fx, GORM, SQLite, Goose, Zap, layered
+boundaries, and `internal/` as the application-code root.
+
+The primary transport change is:
 
 ```text
+OLD
+
 router
   -> middleware
   -> controller
+  -> service
+  -> repository
+  -> GORM
+  -> SQLite
+
+
+NEW
+
+Gin
+  -> middleware
+  -> gqlgen
+  -> resolver
+  -> service
+  -> repository
+  -> GORM
+  -> SQLite
+```
+
+---
+
+## 45. Patterns retained from Apache Answer
+
+Retain:
+
+- small executable entry point;
+- centralized server construction;
+- service/repository boundaries;
+- persistence model separation;
+- constructor-based dependency injection;
+- versioned migrations;
+- `internal/` application code;
+- `pkg/` only for intentionally reusable code.
+
+Adapt:
+
+```text
+Apache Answer-inspired concept      GraphQL-first project
+---------------------------------------------------------------
+HTTP controller boundary       ->   gqlgen resolver boundary
+REST route-per-use-case        ->   GraphQL schema/operation
+request/response DTOs          ->   GraphQL inputs/models + service DTOs
+manual/Wire-style composition  ->   Uber Fx
+persistence stack              ->   GORM
+server SQL DB patterns         ->   SQLite
+migration mechanism            ->   Goose
+logging                        ->   Zap
+```
+
+---
+
+## 46. Core rules to remember
+
+For almost every GraphQL feature:
+
+```text
+schema
+  -> resolver
   -> service
   -> repository interface
   -> GORM repository implementation
   -> SQLite
 ```
 
-And application construction is:
+Application construction:
 
 ```text
 Uber Fx
@@ -1863,9 +2407,34 @@ Uber Fx
   -> GORM/SQLite
   -> repositories
   -> services
-  -> controllers
-  -> middleware/router
-  -> Gin HTTP server
+  -> GraphQL resolvers
+  -> gqlgen executable schema
+  -> gqlgen handler
+  -> Gin router
+  -> HTTP server
 ```
 
-If a future design decision breaks these boundaries, it should have a concrete reason rather than being done for convenience.
+For related-object fields:
+
+```text
+field resolver
+  -> request-scoped DataLoader
+  -> repository batch method
+```
+
+For authorization:
+
+```text
+Gin middleware/directive
+  -> broad authentication/access requirement
+
+Service
+  -> authoritative resource/domain authorization
+```
+
+The most important boundary is:
+
+> **GraphQL is the transport contract. Services are the application contract. Repositories are the persistence contract.**
+
+If a future design decision mixes those responsibilities, it should have a concrete
+reason rather than being done for convenience.
