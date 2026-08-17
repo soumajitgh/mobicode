@@ -4,8 +4,10 @@
 /mobicode
 /api
 /data/*.db
+/data/*.db-journal
 /data/*.db-shm
 /data/*.db-wal
+!/data/.gitkeep
 /coverage/
 
 # Mobile dependencies and generated output

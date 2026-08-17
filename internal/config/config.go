@@ -1,131 +1,87 @@
-// Package config loads and validates application settings from environment variables.
+// Package config loads application settings from environment variables.
 package config
 
 import (
 	"fmt"
-	"net/url"
 	"os"
-	"path/filepath"
-	"time"
+	"strconv"
+	"strings"
 
-	"github.com/caarlos0/env/v11"
-	"github.com/joho/godotenv"
 	"go.uber.org/fx"
 )
 
+// Config contains API settings.
 type Config struct {
-	Environment string `env:"SHARED_ENV" envDefault:"development"`
-	Server      ServerConfig
-	CORS        CORSConfig
-	Database    DatabaseConfig
-	Log         LogConfig
+	Port         string
+	Env          string
+	DatabasePath string
+	JWTSecret    string
 }
 
-type CORSConfig struct {
-	AllowedOrigins []string `env:"SERVER_CORS_ALLOWED_ORIGINS" envSeparator:","`
+// New constructs configuration from environment values.
+func New() (*Config, error) {
+	return Load("")
 }
 
-type ServerConfig struct {
-	Host              string        `env:"SERVER_HOST" envDefault:"0.0.0.0"`
-	Port              int           `env:"SERVER_PORT" envDefault:"8080"`
-	ReadHeaderTimeout time.Duration `env:"SERVER_READ_HEADER_TIMEOUT" envDefault:"5s"`
-	ReadTimeout       time.Duration `env:"SERVER_READ_TIMEOUT" envDefault:"15s"`
-	WriteTimeout      time.Duration `env:"SERVER_WRITE_TIMEOUT" envDefault:"15s"`
-	IdleTimeout       time.Duration `env:"SERVER_IDLE_TIMEOUT" envDefault:"60s"`
-	ShutdownTimeout   time.Duration `env:"SERVER_SHUTDOWN_TIMEOUT" envDefault:"10s"`
-	MaxHeaderBytes    int           `env:"SERVER_MAX_HEADER_BYTES" envDefault:"1048576"`
-	MaxBodyBytes      int64         `env:"SERVER_MAX_BODY_BYTES" envDefault:"1048576"`
-	GraphQLComplexity int           `env:"SERVER_GRAPHQL_COMPLEXITY" envDefault:"250"`
-}
-
-type DatabaseConfig struct {
-	URL            string        `env:"SERVER_DATABASE_URL" envDefault:"http://localhost:9081"`
-	StartupTimeout time.Duration `env:"SERVER_DATABASE_STARTUP_TIMEOUT" envDefault:"30s"`
-	MaxOpenConns   int           `env:"SERVER_DATABASE_MAX_OPEN_CONNS" envDefault:"1"`
-	MaxIdleConns   int           `env:"SERVER_DATABASE_MAX_IDLE_CONNS" envDefault:"1"`
-}
-
-type LogConfig struct {
-	Level       string `env:"SERVER_LOG_LEVEL" envDefault:"info"`
-	Development bool   `env:"SERVER_LOG_DEVELOPMENT" envDefault:"true"`
-	Color       bool   `env:"SERVER_LOG_COLOR" envDefault:"true"`
-}
-
-// Load reads and validates environment configuration.
-func Load() (Config, error) {
-	if err := loadRootEnv(); err != nil {
-		return Config{}, err
-	}
-
-	var cfg Config
-	if err := env.Parse(&cfg); err != nil {
-		return Config{}, fmt.Errorf("parse configuration: %w", err)
-	}
-	if err := cfg.Validate(); err != nil {
-		return Config{}, err
-	}
-	return cfg, nil
-}
-
-// loadRootEnv loads a repository-root .env file when one is present.
-func loadRootEnv() error {
-	dir, err := os.Getwd()
+// Load constructs configuration from environment values, optionally overridden by a .env file.
+func Load(path string) (*Config, error) {
+	values, err := readFile(path)
 	if err != nil {
-		return fmt.Errorf("get working directory: %w", err)
+		return nil, err
+	}
+	value := func(name string) string {
+		if fromFile, ok := values[name]; ok {
+			return fromFile
+		}
+		return os.Getenv(name)
 	}
 
-	for {
-		envPath := filepath.Join(dir, ".env")
-		if _, err := os.Stat(envPath); err == nil {
-			if err := godotenv.Load(envPath); err != nil {
-				return fmt.Errorf("load %s: %w", envPath, err)
+	port := value("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	env := value("ENV")
+	if env == "" {
+		env = "development"
+	}
+	databasePath := value("DATABASE_PATH")
+	if databasePath == "" {
+		databasePath = "data/app.db"
+	}
+	jwtSecret := value("JWT_SECRET")
+	return &Config{Port: port, Env: env, DatabasePath: databasePath, JWTSecret: jwtSecret}, nil
+}
+
+func readFile(path string) (map[string]string, error) {
+	values := make(map[string]string)
+	if path == "" {
+		return values, nil
+	}
+	contents, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read config file: %w", err)
+	}
+	for lineNumber, line := range strings.Split(string(contents), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		line = strings.TrimPrefix(line, "export ")
+		name, raw, ok := strings.Cut(line, "=")
+		if !ok || strings.TrimSpace(name) == "" {
+			return nil, fmt.Errorf("parse config file line %d", lineNumber+1)
+		}
+		value := strings.TrimSpace(raw)
+		if len(value) >= 2 && value[0] == '"' && value[len(value)-1] == '"' {
+			parsed, err := strconv.Unquote(value)
+			if err != nil {
+				return nil, fmt.Errorf("parse config file line %d: %w", lineNumber+1, err)
 			}
-			return nil
-		} else if !os.IsNotExist(err) {
-			return fmt.Errorf("inspect %s: %w", envPath, err)
+			value = parsed
 		}
-
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return nil
-		}
-		dir = parent
+		values[strings.TrimSpace(name)] = value
 	}
+	return values, nil
 }
 
-// Validate checks configuration values needed at startup.
-func (c Config) Validate() error {
-	if c.Server.Port < 1 || c.Server.Port > 65535 {
-		return fmt.Errorf("SERVER_PORT must be between 1 and 65535")
-	}
-	if c.Database.URL == "" {
-		return fmt.Errorf("SERVER_DATABASE_URL is required")
-	}
-	if c.Database.StartupTimeout <= 0 {
-		return fmt.Errorf("SERVER_DATABASE_STARTUP_TIMEOUT must be positive")
-	}
-	if c.Database.MaxOpenConns < 1 || c.Database.MaxIdleConns < 0 {
-		return fmt.Errorf("database connection limits are invalid")
-	}
-	if c.Server.ReadHeaderTimeout <= 0 || c.Server.ReadTimeout <= 0 || c.Server.WriteTimeout <= 0 || c.Server.IdleTimeout <= 0 || c.Server.ShutdownTimeout <= 0 {
-		return fmt.Errorf("server timeouts must be positive")
-	}
-	if c.Server.MaxHeaderBytes < 1 {
-		return fmt.Errorf("SERVER_MAX_HEADER_BYTES must be positive")
-	}
-	if c.Server.MaxBodyBytes < 1 {
-		return fmt.Errorf("SERVER_MAX_BODY_BYTES must be positive")
-	}
-	if c.Server.GraphQLComplexity < 1 {
-		return fmt.Errorf("SERVER_GRAPHQL_COMPLEXITY must be positive")
-	}
-	for _, origin := range c.CORS.AllowedOrigins {
-		parsed, err := url.Parse(origin)
-		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil || parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" {
-			return fmt.Errorf("SERVER_CORS_ALLOWED_ORIGINS contains invalid origin %q", origin)
-		}
-	}
-	return nil
-}
-
-var Module = fx.Module("config", fx.Provide(Load))
+var Module = fx.Module("config", fx.Provide(New))

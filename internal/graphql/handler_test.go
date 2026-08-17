@@ -1,70 +1,83 @@
 package graphql
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
-	"github.com/soumajitgh/mobicode/internal/config"
-	"github.com/soumajitgh/mobicode/internal/graphql/resolver"
-	"github.com/soumajitgh/mobicode/internal/service/task"
-
 	"go.uber.org/zap"
+
+	"github.com/soumajitgh/mobicode/internal/user"
 )
 
-type fakeTaskService struct{}
-
-// Create returns a deterministic Task for GraphQL handler tests.
-func (fakeTaskService) Create(context.Context, task.CreateInput) (*task.Task, error) {
-	return &task.Task{ID: 1, Title: "first task", Status: "pending", CreatedAt: time.Unix(0, 0), UpdatedAt: time.Unix(0, 0)}, nil
+type memoryUserRepository struct {
+	users map[string]*user.User
 }
 
-// Get returns no Task because retrieval is outside this test's scope.
-func (fakeTaskService) Get(context.Context, uint) (*task.Task, error) { return nil, nil }
-
-// List returns an empty Task page because listing is outside this test's scope.
-func (fakeTaskService) List(context.Context, task.ListInput) (*task.TaskConnection, error) {
-	return &task.TaskConnection{}, nil
-}
-
-// Update returns no Task because updating is outside this test's scope.
-func (fakeTaskService) Update(context.Context, uint, task.UpdateInput) (*task.Task, error) {
-	return nil, nil
-}
-
-// Delete succeeds because deletion is outside this test's scope.
-func (fakeTaskService) Delete(context.Context, uint) error { return nil }
-
-// TestHandlerServesGraphQLOperations verifies a root query and mutation execute through gqlgen.
-func TestHandlerServesGraphQLOperations(t *testing.T) {
-	handler := NewHandler(config.Config{Server: config.ServerConfig{GraphQLComplexity: 250}}, resolver.New(fakeTaskService{}), zap.NewNop())
-	for _, testCase := range []struct{ name, query, want string }{
-		{name: "ping", query: `{ "query": "query { ping }" }`, want: `"ping":"pong"`},
-		{name: "create task", query: `{ "query": "mutation { createTask(input: { title: \"first task\" }) { id title status } }" }`, want: `"title":"first task"`},
-	} {
-		t.Run(testCase.name, func(t *testing.T) {
-			request := httptest.NewRequest(http.MethodPost, "/graphql", bytes.NewBufferString(testCase.query))
-			request.Header.Set("Content-Type", "application/json")
-			response := httptest.NewRecorder()
-			handler.ServeHTTP(response, request)
-			if response.Code != http.StatusOK {
-				t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
-			}
-			var body map[string]any
-			if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
-				t.Fatalf("decode response: %v", err)
-			}
-			encoded, err := json.Marshal(body)
-			if err != nil {
-				t.Fatalf("encode response: %v", err)
-			}
-			if !bytes.Contains(encoded, []byte(testCase.want)) {
-				t.Fatalf("response = %s, want %s", encoded, testCase.want)
-			}
-		})
+func (r *memoryUserRepository) FindByID(_ context.Context, id string) (*user.User, error) {
+	found, ok := r.users[id]
+	if !ok {
+		return nil, user.ErrNotFound
 	}
+	return found, nil
+}
+
+func (r *memoryUserRepository) FindByEmail(_ context.Context, email string) (*user.User, error) {
+	for _, found := range r.users {
+		if found.Email == email {
+			return found, nil
+		}
+	}
+	return nil, user.ErrNotFound
+}
+
+func (r *memoryUserRepository) Create(_ context.Context, value *user.User) error {
+	value.CreatedAt = time.Now().UTC()
+	r.users[value.ID] = value
+	return nil
+}
+
+func TestServerCreatesAndQueriesUser(t *testing.T) {
+	repo := &memoryUserRepository{users: make(map[string]*user.User)}
+	service := user.NewService(repo, zap.NewNop())
+	server := NewServer(&Resolver{user: user.NewResolver(service)}, zap.NewNop())
+
+	created := executeGraphQL(server, `mutation { createUser(name: "Zoravix", email: "z@fotopick.in") { id name email } }`)
+	if created.Code != http.StatusOK {
+		t.Fatalf("create status = %d, want %d: %s", created.Code, http.StatusOK, created.Body.String())
+	}
+	var createResponse struct {
+		Data struct {
+			CreateUser struct {
+				ID string `json:"id"`
+			} `json:"createUser"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(created.Body).Decode(&createResponse); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+	if createResponse.Data.CreateUser.ID == "" {
+		t.Fatalf("create response did not contain a user ID: %s", created.Body.String())
+	}
+
+	found := executeGraphQL(server, `query { user(id: "`+createResponse.Data.CreateUser.ID+`") { id name email createdAt } }`)
+	if found.Code != http.StatusOK {
+		t.Fatalf("query status = %d, want %d: %s", found.Code, http.StatusOK, found.Body.String())
+	}
+	if !json.Valid(found.Body.Bytes()) {
+		t.Fatalf("query response is not JSON: %s", found.Body.String())
+	}
+}
+
+func executeGraphQL(server http.Handler, query string) *httptest.ResponseRecorder {
+	request := httptest.NewRequest(http.MethodPost, "/query", strings.NewReader(`{"query":`+strconv.Quote(query)+`}`))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	server.ServeHTTP(response, request)
+	return response
 }

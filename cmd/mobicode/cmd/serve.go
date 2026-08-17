@@ -1,0 +1,48 @@
+package cmd
+
+import (
+	"fmt"
+
+	"github.com/spf13/cobra"
+	"go.uber.org/fx"
+	"go.uber.org/fx/fxevent"
+	"go.uber.org/zap"
+
+	"github.com/soumajitgh/mobicode/internal/auth"
+	"github.com/soumajitgh/mobicode/internal/config"
+	"github.com/soumajitgh/mobicode/internal/database"
+	"github.com/soumajitgh/mobicode/internal/graphql"
+	"github.com/soumajitgh/mobicode/internal/health"
+	"github.com/soumajitgh/mobicode/internal/logger"
+	"github.com/soumajitgh/mobicode/internal/server"
+	"github.com/soumajitgh/mobicode/internal/user"
+)
+
+var serveCmd = &cobra.Command{
+	Use:   "serve",
+	Short: "Start the API server",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cfg, err := config.Load(configPath)
+		if err != nil {
+			return fmt.Errorf("load config: %w", err)
+		}
+		app := fx.New(
+			fx.Supply(cfg),
+			auth.Module,
+			logger.Module,
+			database.Module,
+			server.Module,
+			health.Module,
+			user.Module,
+			graphql.Module,
+			fx.WithLogger(func(log *zap.Logger) fxevent.Logger { return logger.NewFxLogger(log) }),
+		)
+		if err := app.Err(); err != nil {
+			return err
+		}
+		app.Run()
+		return nil
+	},
+}
+
+func init() { rootCmd.AddCommand(serveCmd) }

@@ -1,21 +1,17 @@
 schema:
-  - internal/graphql/schema/*.graphqls
+  - graph/schema.graphql
+  - internal/**/*.graphql
 
 exec:
-  filename: internal/graphql/generated/generated.go
+  filename: graph/generated/generated.go
   package: generated
 
 model:
-  filename: internal/graphql/model/models_gen.go
+  filename: graph/model/models_gen.go
   package: model
 
 resolver:
   layout: follow-schema
-  dir: internal/graphql/resolver
-  package: resolver
+  dir: internal/graphql
+  package: graphql
   filename_template: "{name}.resolvers.go"
-
-models:
-  DateTime:
-    model:
-      - github.com/99designs/gqlgen/graphql.Time
