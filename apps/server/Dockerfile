@@ -11,6 +11,6 @@ WORKDIR /app
 COPY --from=build /out/api /app/api
 RUN mkdir /data && chown appuser:appuser /data
 USER appuser
-ENV SHARED_ENV=production SERVER_DATABASE_PATH=/data/app.db SERVER_LOG_DEVELOPMENT=false
+ENV SHARED_ENV=production SERVER_LOG_DEVELOPMENT=false SERVER_LOG_COLOR=false
 EXPOSE 8080
 ENTRYPOINT ["/app/api"]

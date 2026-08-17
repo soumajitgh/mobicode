@@ -40,6 +40,7 @@ type DatabaseConfig struct {
 type LogConfig struct {
 	Level       string `env:"SERVER_LOG_LEVEL" envDefault:"info"`
 	Development bool   `env:"SERVER_LOG_DEVELOPMENT" envDefault:"true"`
+	Color       bool   `env:"SERVER_LOG_COLOR" envDefault:"true"`
 }
 
 // Load reads and validates environment configuration.

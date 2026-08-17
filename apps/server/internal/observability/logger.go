@@ -9,6 +9,7 @@ import (
 
 	"go.uber.org/fx"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 // NewLogger builds the application's configured Zap logger.
@@ -22,6 +23,10 @@ func NewLogger(cfg config.Config) (*zap.Logger, error) {
 		loggerConfig = zap.NewDevelopmentConfig()
 	}
 	loggerConfig.Level = level
+	if cfg.Log.Color {
+		loggerConfig.Encoding = "console"
+		loggerConfig.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
+	}
 	return loggerConfig.Build()
 }
 
