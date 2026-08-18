@@ -135,7 +135,7 @@ func TestAuthenticateAddsUserToContext(t *testing.T) {
 		}
 		w.WriteHeader(http.StatusNoContent)
 	}))
-	request := httptest.NewRequest(http.MethodPost, "/query", nil)
+	request := httptest.NewRequest(http.MethodPost, "/graphql", nil)
 	request.Header.Set("Authorization", "Bearer "+token)
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)

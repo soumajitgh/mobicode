@@ -75,7 +75,7 @@ func TestServerCreatesAndQueriesUser(t *testing.T) {
 }
 
 func executeGraphQL(server http.Handler, query string) *httptest.ResponseRecorder {
-	request := httptest.NewRequest(http.MethodPost, "/query", strings.NewReader(`{"query":`+strconv.Quote(query)+`}`))
+	request := httptest.NewRequest(http.MethodPost, "/graphql", strings.NewReader(`{"query":`+strconv.Quote(query)+`}`))
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
 	server.ServeHTTP(response, request)

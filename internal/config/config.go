@@ -25,6 +25,11 @@ func New() (*Config, error) {
 
 // Load constructs configuration from environment values, optionally overridden by a .env file.
 func Load(path string) (*Config, error) {
+	if path == "" {
+		if _, err := os.Stat(".env"); err == nil {
+			path = ".env"
+		}
+	}
 	values, err := readFile(path)
 	if err != nil {
 		return nil, err

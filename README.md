@@ -6,7 +6,7 @@ authentication.
 
 ## Features
 
-- GraphQL API at `/query`
+- GraphQL API at `/graphql`
 - SQLite with embedded, versioned migrations
 - Email/password authentication with short-lived JWT access tokens and rotated
   per-device refresh tokens
@@ -38,7 +38,7 @@ go run ./cmd/mobicode init --config .env
 go run ./cmd/mobicode serve --config .env
 ```
 
-The API is available at `http://localhost:8080/query`. Health checks are
+The API is available at `http://localhost:8080/graphql`. Health checks are
 available at `http://localhost:8080/health`.
 
 ## Configuration
@@ -62,7 +62,7 @@ current.
 All application operations use GraphQL. For example, register an account:
 
 ```sh
-curl http://localhost:8080/query \
+curl http://localhost:8080/graphql \
   -H 'Content-Type: application/json' \
   --data '{"query":"mutation { register(name: \\"Ada\\", email: \\"ada@example.com\\", password: \\"correct-horse-battery-staple\\") { accessToken refreshToken user { id name email } } }"}'
 ```
