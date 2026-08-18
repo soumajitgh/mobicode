@@ -11,5 +11,6 @@ var Module = fx.Module(
 	fx.Provide(NewHandler),
 	fx.Invoke(func(mux *chi.Mux, handler *Handler) {
 		mux.Get("/health", handler.Check)
+		mux.Get("/healthz", handler.Check)
 	}),
 )

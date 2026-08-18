@@ -1,7 +1,7 @@
 {
   "yaakVersion": "0.1.0",
   "yaakSchema": 4,
-  "timestamp": "2026-08-18T18:46:05.128311",
+  "timestamp": "2026-08-18T19:32:45.140956",
   "resources": {
     "workspaces": [
       {
@@ -52,37 +52,37 @@
           {
             "enabled": true,
             "name": "access_token",
-            "value": "",
+            "value": "${[ response.body.path(request=\"rq_sJSGHAmWUq\", path=\"$.data.login.accessToken\") ]}",
             "id": null
           },
           {
             "enabled": true,
             "name": "refresh_token",
-            "value": "",
+            "value": "${[ response.body.path(request=\"rq_sJSGHAmWUq\", path=\"$.data.login.refreshToken\") ]}",
             "id": null
           },
           {
             "enabled": true,
             "name": "user_id",
-            "value": "",
+            "value": "d4889109-9f6c-49f1-afce-4524186ab95f",
             "id": null
           },
           {
             "enabled": true,
             "name": "test_name",
-            "value": "${[ faker.person.fullName() ]}",
+            "value": "Test User",
             "id": null
           },
           {
             "enabled": true,
             "name": "test_email",
-            "value": "${[ faker.internet.email() ]}",
+            "value": "test@mobicode.dev",
             "id": null
           },
           {
             "enabled": true,
             "name": "test_password",
-            "value": "${[ faker.internet.password() ]}",
+            "value": "password-123",
             "id": null
           }
         ],
@@ -209,14 +209,66 @@
     "httpRequests": [
       {
         "model": "http_request",
-        "id": "rq_zppwLJGuZn",
-        "createdAt": "2026-08-18T17:50:32.841290",
-        "updatedAt": "2026-08-18T18:04:06.358793",
+        "id": "rq_EQNLDq8BtR",
+        "createdAt": "2026-08-18T19:19:13.213794",
+        "updatedAt": "2026-08-18T19:19:13.213795",
         "workspaceId": "wk_X9uSrTPZ8C",
         "folderId": "fl_GDeMsaKrtM",
         "authentication": {
           "prefix": "Bearer",
-          "token": "${[ access_token ]}"
+          "token": "${[ user_id ]}"
+        },
+        "authenticationType": "bearer",
+        "body": {
+          "operationName": "GetMe",
+          "query": "query GetMe {\n  me {\n    id\n    name\n    email\n    createdAt\n  }\n}"
+        },
+        "bodyType": "graphql",
+        "description": "",
+        "headers": [
+          {
+            "enabled": true,
+            "name": "Content-Type",
+            "value": "application/json",
+            "id": null
+          }
+        ],
+        "method": "POST",
+        "name": "Get Me",
+        "sortPriority": 0.0,
+        "url": "${[ graphql_url ]}",
+        "urlParameters": [],
+        "settingSendCookies": {
+          "enabled": false,
+          "value": true
+        },
+        "settingStoreCookies": {
+          "enabled": false,
+          "value": true
+        },
+        "settingValidateCertificates": {
+          "enabled": false,
+          "value": true
+        },
+        "settingFollowRedirects": {
+          "enabled": false,
+          "value": true
+        },
+        "settingRequestTimeout": {
+          "enabled": false,
+          "value": 0
+        }
+      },
+      {
+        "model": "http_request",
+        "id": "rq_zppwLJGuZn",
+        "createdAt": "2026-08-18T17:50:32.841290",
+        "updatedAt": "2026-08-18T19:31:48.150743",
+        "workspaceId": "wk_X9uSrTPZ8C",
+        "folderId": "fl_GDeMsaKrtM",
+        "authentication": {
+          "prefix": "Bearer",
+          "token": "${[ user_id ]}"
         },
         "authenticationType": "bearer",
         "body": {
@@ -267,8 +319,11 @@
         "updatedAt": "2026-08-18T18:03:55.598850",
         "workspaceId": "wk_X9uSrTPZ8C",
         "folderId": "fl_4hRkZJzG5V",
-        "authentication": {},
-        "authenticationType": null,
+        "authentication": {
+          "prefix": "Bearer",
+          "token": "${[ user_id ]}"
+        },
+        "authenticationType": "bearer",
         "body": {
           "operationName": "Logout",
           "query": "mutation Logout($refreshToken: String!) {\n  logout(refreshToken: $refreshToken)\n}",

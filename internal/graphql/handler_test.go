@@ -91,9 +91,9 @@ func TestServerRegistersAndQueriesUser(t *testing.T) {
 	}
 
 	userService := user.NewService(userRepo, zap.NewNop())
-	authService := auth.NewService(userService, refreshRepo, auth.NewPasswordService(), jwt, zap.NewNop())
+	authService := auth.NewService(userService, refreshRepo, auth.NewPasswordService(), jwt, zap.NewNop(), &config.Config{})
 
-	server := NewServer(NewResolver(user.NewResolver(userService), auth.NewResolver(authService)), zap.NewNop())
+	server := auth.Middleware(auth.NewJWTAuthenticator(jwt))(NewServer(NewResolver(user.NewResolver(userService), auth.NewResolver(authService)), zap.NewNop()))
 
 	registered := executeGraphQL(server, `mutation { register(name: "Zoravix", email: "z@fotopick.in", password: "password-123") { accessToken user { id name email } } }`)
 	if registered.Code != http.StatusOK {
@@ -116,11 +116,12 @@ func TestServerRegistersAndQueriesUser(t *testing.T) {
 		t.Fatalf("decode register response: %v", err)
 	}
 	userID := registerResponse.Data.Register.User.ID
-	if userID == "" {
-		t.Fatalf("register response did not contain a user ID: %s", registered.Body.String())
+	accessToken := registerResponse.Data.Register.AccessToken
+	if userID == "" || accessToken == "" {
+		t.Fatalf("register response did not contain user ID or access token: %s", registered.Body.String())
 	}
 
-	found := executeGraphQL(server, `query { user(id: "`+userID+`") { id name email createdAt } }`)
+	found := executeGraphQL(server, `query { user(id: "`+userID+`") { id name email createdAt } }`, accessToken)
 	if found.Code != http.StatusOK {
 		t.Fatalf("query status = %d, want %d: %s", found.Code, http.StatusOK, found.Body.String())
 	}
@@ -128,8 +129,8 @@ func TestServerRegistersAndQueriesUser(t *testing.T) {
 		t.Fatalf("query response is not JSON: %s", found.Body.String())
 	}
 
-	// Test querying empty ID returns null user without error
-	emptyQuery := executeGraphQL(server, `query { user(id: "") { id name } }`)
+	// Test querying empty ID returns null user without error when authenticated
+	emptyQuery := executeGraphQL(server, `query { user(id: "") { id name } }`, accessToken)
 	if emptyQuery.Code != http.StatusOK {
 		t.Fatalf("empty user id query status = %d, want %d: %s", emptyQuery.Code, http.StatusOK, emptyQuery.Body.String())
 	}
@@ -152,9 +153,12 @@ func TestServerRegistersAndQueriesUser(t *testing.T) {
 	}
 }
 
-func executeGraphQL(server http.Handler, query string) *httptest.ResponseRecorder {
+func executeGraphQL(server http.Handler, query string, token ...string) *httptest.ResponseRecorder {
 	request := httptest.NewRequest(http.MethodPost, "/graphql", strings.NewReader(`{"query":`+strconv.Quote(query)+`}`))
 	request.Header.Set("Content-Type", "application/json")
+	if len(token) > 0 && token[0] != "" {
+		request.Header.Set("Authorization", "Bearer "+token[0])
+	}
 	response := httptest.NewRecorder()
 	server.ServeHTTP(response, request)
 	return response

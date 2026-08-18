@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/soumajitgh/mobicode/internal/config"
 	"github.com/soumajitgh/mobicode/internal/user"
@@ -85,7 +86,7 @@ func TestServiceRegisterLoginRefreshLogout(t *testing.T) {
 		t.Fatalf("create JWT service: %v", err)
 	}
 	userService := user.NewService(users, zap.NewNop())
-	service := NewService(userService, refresh, NewPasswordService(), jwt, zap.NewNop())
+	service := NewService(userService, refresh, NewPasswordService(), jwt, zap.NewNop(), &config.Config{})
 
 	registered, err := service.Register(context.Background(), "Zoravix", "z@fotopick.in", "password-123")
 	if err != nil {
@@ -119,6 +120,29 @@ func TestServiceRegisterLoginRefreshLogout(t *testing.T) {
 	}
 }
 
+func TestServiceRegisterLogsDevelopmentUserID(t *testing.T) {
+	users := &memoryUsers{byID: map[string]*user.User{}, byEmail: map[string]*user.User{}}
+	refresh := &memoryRefreshTokens{tokens: map[string]*RefreshToken{}}
+	jwt, err := NewJWTService(&config.Config{JWTSecret: "test-secret-with-at-least-thirty-two-bytes"})
+	if err != nil {
+		t.Fatalf("create JWT service: %v", err)
+	}
+	core, logs := observer.New(zap.InfoLevel)
+	service := NewService(user.NewService(users, zap.New(core)), refresh, NewPasswordService(), jwt, zap.New(core), &config.Config{Env: "development"})
+
+	registered, err := service.Register(context.Background(), "Dev User", "dev@example.com", "password-123")
+	if err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	entries := logs.FilterMessage("development user created; set DEV_USER_ID to use this account with dev auth").All()
+	if len(entries) != 1 {
+		t.Fatalf("development user log entries = %d, want 1", len(entries))
+	}
+	if got := entries[0].ContextMap()["user_id"]; got != registered.User.ID {
+		t.Fatalf("logged user_id = %v, want %q", got, registered.User.ID)
+	}
+}
+
 func TestAuthenticateAddsUserToContext(t *testing.T) {
 	jwt, err := NewJWTService(&config.Config{JWTSecret: "test-secret-with-at-least-thirty-two-bytes"})
 	if err != nil {
@@ -129,10 +153,10 @@ func TestAuthenticateAddsUserToContext(t *testing.T) {
 		t.Fatalf("sign token: %v", err)
 	}
 
-	handler := Authenticate(jwt)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := UserIDFromContext(r.Context())
-		if !ok || userID != "user-1" {
-			t.Fatalf("context user ID = %q, %v", userID, ok)
+	handler := Authenticate(NewJWTAuthenticator(jwt))(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		p, ok := PrincipalFromContext(r.Context())
+		if !ok || p.UserID != "user-1" {
+			t.Fatalf("context principal = %+v, %v", p, ok)
 		}
 		w.WriteHeader(http.StatusNoContent)
 	}))

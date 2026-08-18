@@ -12,10 +12,12 @@ import (
 
 // Config contains API settings.
 type Config struct {
-	Port         string
-	Env          string
-	DatabasePath string
-	JWTSecret    string
+	Port           string
+	Env            string
+	DatabasePath   string
+	JWTSecret      string
+	DevAuthEnabled bool
+	DevUserID      string
 }
 
 // New constructs configuration from environment values.
@@ -47,6 +49,9 @@ func Load(path string) (*Config, error) {
 	}
 	env := value("ENV")
 	if env == "" {
+		env = value("APP_ENV")
+	}
+	if env == "" {
 		env = "development"
 	}
 	databasePath := value("DATABASE_PATH")
@@ -54,7 +59,18 @@ func Load(path string) (*Config, error) {
 		databasePath = "data/app.db"
 	}
 	jwtSecret := value("JWT_SECRET")
-	return &Config{Port: port, Env: env, DatabasePath: databasePath, JWTSecret: jwtSecret}, nil
+
+	devAuthEnabled, _ := strconv.ParseBool(value("DEV_AUTH_ENABLED"))
+	devUserID := strings.TrimSpace(value("DEV_USER_ID"))
+
+	return &Config{
+		Port:           port,
+		Env:            env,
+		DatabasePath:   databasePath,
+		JWTSecret:      jwtSecret,
+		DevAuthEnabled: devAuthEnabled,
+		DevUserID:      devUserID,
+	}, nil
 }
 
 func readFile(path string) (map[string]string, error) {

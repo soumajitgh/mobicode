@@ -6,13 +6,16 @@ GOIMPORTS ?= goimports
 GOLANGCI_LINT ?= golangci-lint
 BUILD_OUTPUT ?= build/mobicode
 
-.PHONY: dev run build clean test vet format lint check graphql-generate graphql-check \
+.PHONY: dev run init build clean test vet format lint check graphql-generate graphql-check \
 	migrate-create deps-up deps-down deps-logs mobile-install mobile-dev mobile-check
 
-dev: deps-up
+init:
+	go run ./cmd/mobicode init
+
+dev: deps-up init
 	$(AIR)
 
-run: deps-up
+run: deps-up init
 	go run ./cmd/mobicode serve
 
 build:

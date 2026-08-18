@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/soumajitgh/mobicode/graphql/model"
+	"github.com/soumajitgh/mobicode/internal/auth"
 )
 
 // User is the resolver for the user field.
@@ -16,3 +17,18 @@ func (r *queryResolver) User(ctx context.Context, id string) (*model.User, error
 	return r.user.User(ctx, id)
 }
 
+// Me is the resolver for the me field.
+func (r *queryResolver) Me(ctx context.Context) (*model.User, error) {
+	principal, ok := auth.PrincipalFromContext(ctx)
+	if !ok {
+		return nil, auth.ErrUnauthenticated
+	}
+	u, err := r.user.User(ctx, principal.UserID)
+	if err != nil {
+		return nil, err
+	}
+	if u == nil {
+		return nil, auth.ErrUnauthenticated
+	}
+	return u, nil
+}

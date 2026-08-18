@@ -13,17 +13,11 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
+	"github.com/soumajitgh/mobicode/internal/config"
 	"github.com/soumajitgh/mobicode/internal/user"
 )
 
 const refreshTokenLifetime = 30 * 24 * time.Hour
-
-var (
-	ErrInvalidCredentials  = errors.New("invalid credentials")
-	ErrInvalidRefreshToken = errors.New("invalid refresh token")
-	ErrUnauthorized        = errors.New("unauthorized")
-	ErrInvalidRegistration = errors.New("invalid registration")
-)
 
 // Tokens are returned to a mobile client after successful authentication.
 type Tokens struct {
@@ -39,10 +33,11 @@ type Service struct {
 	password    *PasswordService
 	jwt         *JWTService
 	log         *zap.Logger
+	cfg         *config.Config
 }
 
-func NewService(userService *user.Service, refresh Repository, password *PasswordService, jwt *JWTService, log *zap.Logger) *Service {
-	return &Service{userService: userService, refresh: refresh, password: password, jwt: jwt, log: log}
+func NewService(userService *user.Service, refresh Repository, password *PasswordService, jwt *JWTService, log *zap.Logger, cfg *config.Config) *Service {
+	return &Service{userService: userService, refresh: refresh, password: password, jwt: jwt, log: log, cfg: cfg}
 }
 
 func (s *Service) Register(ctx context.Context, name, email, password string) (*Tokens, error) {
@@ -62,6 +57,9 @@ func (s *Service) Register(ctx context.Context, name, email, password string) (*
 		}
 		s.log.Error("register user", zap.Error(err))
 		return nil, err
+	}
+	if s.cfg != nil && s.cfg.Env == "development" {
+		s.log.Info("development user created; set DEV_USER_ID to use this account with dev auth", zap.String("user_id", account.ID))
 	}
 	return s.issueTokens(ctx, account)
 }

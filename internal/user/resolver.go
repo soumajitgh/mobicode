@@ -26,4 +26,3 @@ func (r *Resolver) User(ctx context.Context, id string) (*graphmodel.User, error
 	}
 	return ToGraphQL(user), nil
 }
-
