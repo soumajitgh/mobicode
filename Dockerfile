@@ -3,7 +3,7 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=1 go build -o /out/api ./cmd/api
+RUN CGO_ENABLED=1 go build -o /out/api ./cmd/mobicode
 
 FROM debian:bookworm-slim
 RUN useradd --system --create-home appuser
@@ -13,4 +13,4 @@ RUN mkdir /data && chown appuser:appuser /data
 USER appuser
 ENV SHARED_ENV=production SERVER_LOG_DEVELOPMENT=false SERVER_LOG_COLOR=false
 EXPOSE 8080
-ENTRYPOINT ["/app/api"]
+ENTRYPOINT ["/app/api", "serve"]

@@ -13,11 +13,11 @@ dev: deps-up
 	$(AIR)
 
 run: deps-up
-	go run ./cmd/api
+	go run ./cmd/mobicode serve
 
 build:
 	mkdir -p $$(dirname $(BUILD_OUTPUT))
-	go build -o $(BUILD_OUTPUT) ./cmd/api
+	go build -o $(BUILD_OUTPUT) ./cmd/mobicode
 
 clean:
 	go clean ./...
