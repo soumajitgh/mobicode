@@ -3,7 +3,7 @@ package user
 import (
 	"context"
 	"errors"
-	"net/mail"
+	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
@@ -11,8 +11,9 @@ import (
 )
 
 var (
-	ErrNotFound = errors.New("user not found")
-	ErrInvalid  = errors.New("invalid user")
+	ErrNotFound   = errors.New("user not found")
+	ErrInvalid    = errors.New("invalid user")
+	ErrEmailTaken = errors.New("email already taken")
 )
 
 // Service contains user business logic.
@@ -26,29 +27,54 @@ func NewService(repo Repository, log *zap.Logger) *Service {
 }
 
 func (s *Service) GetUser(ctx context.Context, id string) (*User, error) {
-	s.log.Info("fetching user", zap.String("user_id", id))
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return nil, ErrInvalid
+	}
+	s.log.Debug("fetching user", zap.String("user_id", id))
 	user, err := s.repo.FindByID(ctx, id)
 	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			s.log.Debug("user not found", zap.String("user_id", id))
+			return nil, ErrNotFound
+		}
 		s.log.Error("failed to fetch user", zap.String("user_id", id), zap.Error(err))
 		return nil, err
 	}
 	return user, nil
 }
 
-func (s *Service) CreateUser(ctx context.Context, name, email string) (*User, error) {
+func (s *Service) GetUserByEmail(ctx context.Context, email string) (*User, error) {
+	email = strings.ToLower(strings.TrimSpace(email))
+	if email == "" {
+		return nil, ErrInvalid
+	}
+	return s.repo.FindByEmail(ctx, email)
+}
+
+func (s *Service) CreateUser(ctx context.Context, name, email, passwordHash string) (*User, error) {
 	name = strings.TrimSpace(name)
-	email = strings.TrimSpace(email)
+	email = strings.ToLower(strings.TrimSpace(email))
 	if name == "" || email == "" {
 		return nil, ErrInvalid
 	}
-	if _, err := mail.ParseAddress(email); err != nil {
-		return nil, ErrInvalid
+	existing, err := s.repo.FindByEmail(ctx, email)
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		return nil, fmt.Errorf("checking existing user: %w", err)
 	}
-
-	user := &User{ID: uuid.NewString(), Name: name, Email: email}
-	if err := s.repo.Create(ctx, user); err != nil {
-		s.log.Error("failed to create user", zap.Error(err))
-		return nil, err
+	if existing != nil {
+		return nil, ErrEmailTaken
 	}
-	return user, nil
+	u := &User{
+		ID:           uuid.NewString(),
+		Name:         name,
+		Email:        email,
+		PasswordHash: passwordHash,
+	}
+	if err := s.repo.Create(ctx, u); err != nil {
+		return nil, fmt.Errorf("creating user: %w", err)
+	}
+	return u, nil
 }
+
+

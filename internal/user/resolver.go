@@ -18,7 +18,7 @@ func NewResolver(service *Service) *Resolver {
 
 func (r *Resolver) User(ctx context.Context, id string) (*graphmodel.User, error) {
 	user, err := r.service.GetUser(ctx, id)
-	if errors.Is(err, ErrNotFound) {
+	if errors.Is(err, ErrNotFound) || errors.Is(err, ErrInvalid) {
 		return nil, nil
 	}
 	if err != nil {
@@ -27,10 +27,3 @@ func (r *Resolver) User(ctx context.Context, id string) (*graphmodel.User, error
 	return ToGraphQL(user), nil
 }
 
-func (r *Resolver) CreateUser(ctx context.Context, name, email string) (*graphmodel.User, error) {
-	user, err := r.service.CreateUser(ctx, name, email)
-	if err != nil {
-		return nil, err
-	}
-	return ToGraphQL(user), nil
-}

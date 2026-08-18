@@ -34,15 +34,15 @@ type Tokens struct {
 
 // Service owns account registration and token issuance.
 type Service struct {
-	users    user.Repository
-	refresh  Repository
-	password *PasswordService
-	jwt      *JWTService
-	log      *zap.Logger
+	userService *user.Service
+	refresh     Repository
+	password    *PasswordService
+	jwt         *JWTService
+	log         *zap.Logger
 }
 
-func NewService(users user.Repository, refresh Repository, password *PasswordService, jwt *JWTService, log *zap.Logger) *Service {
-	return &Service{users: users, refresh: refresh, password: password, jwt: jwt, log: log}
+func NewService(userService *user.Service, refresh Repository, password *PasswordService, jwt *JWTService, log *zap.Logger) *Service {
+	return &Service{userService: userService, refresh: refresh, password: password, jwt: jwt, log: log}
 }
 
 func (s *Service) Register(ctx context.Context, name, email, password string) (*Tokens, error) {
@@ -55,8 +55,11 @@ func (s *Service) Register(ctx context.Context, name, email, password string) (*
 	if err != nil {
 		return nil, err
 	}
-	account := &user.User{ID: uuid.NewString(), Name: name, Email: email, PasswordHash: hash}
-	if err := s.users.Create(ctx, account); err != nil {
+	account, err := s.userService.CreateUser(ctx, name, email, hash)
+	if err != nil {
+		if errors.Is(err, user.ErrEmailTaken) {
+			return nil, err
+		}
 		s.log.Error("register user", zap.Error(err))
 		return nil, err
 	}
@@ -64,7 +67,7 @@ func (s *Service) Register(ctx context.Context, name, email, password string) (*
 }
 
 func (s *Service) Login(ctx context.Context, email, password string) (*Tokens, error) {
-	account, err := s.users.FindByEmail(ctx, normalizeEmail(email))
+	account, err := s.userService.GetUserByEmail(ctx, normalizeEmail(email))
 	if err != nil || account.PasswordHash == "" || !s.password.Verify(password, account.PasswordHash) {
 		return nil, ErrInvalidCredentials
 	}
@@ -77,7 +80,7 @@ func (s *Service) Refresh(ctx context.Context, token string) (*Tokens, error) {
 	if err != nil {
 		return nil, err
 	}
-	account, err := s.users.FindByID(ctx, current.UserID)
+	account, err := s.userService.GetUser(ctx, current.UserID)
 	if err != nil {
 		return nil, err
 	}

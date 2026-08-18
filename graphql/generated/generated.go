@@ -44,7 +44,6 @@ type ComplexityRoot struct {
 	}
 
 	Mutation struct {
-		CreateUser   func(childComplexity int, name string, email string) int
 		Login        func(childComplexity int, email string, password string) int
 		Logout       func(childComplexity int, refreshToken string) int
 		RefreshToken func(childComplexity int, refreshToken string) int
@@ -72,7 +71,6 @@ type MutationResolver interface {
 	Login(ctx context.Context, email string, password string) (*model.AuthPayload, error)
 	RefreshToken(ctx context.Context, refreshToken string) (*model.AuthPayload, error)
 	Logout(ctx context.Context, refreshToken string) (bool, error)
-	CreateUser(ctx context.Context, name string, email string) (*model.User, error)
 }
 type QueryResolver interface {
 	User(ctx context.Context, id string) (*model.User, error)
@@ -115,17 +113,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.AuthPayload.User(childComplexity), true
 
-	case "Mutation.createUser":
-		if e.ComplexityRoot.Mutation.CreateUser == nil {
-			break
-		}
-
-		args, err := ec.field_Mutation_createUser_args(ctx, rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.ComplexityRoot.Mutation.CreateUser(childComplexity, args["name"].(string), args["email"].(string)), true
 	case "Mutation.login":
 		if e.ComplexityRoot.Mutation.Login == nil {
 			break
@@ -320,9 +307,6 @@ extend type Query {
   user(id: ID!): User
 }
 
-extend type Mutation {
-  createUser(name: String!, email: String!): User!
-}
 `, BuiltIn: false},
 }
 var parsedSchema = gqlparser.MustLoadSchema(sources...)
@@ -472,28 +456,6 @@ func (ec *executionContext) childFields___Type(ctx context.Context, field graphq
 // endregion ************************** internal!.gotpl ***************************
 
 // region    ***************************** args.gotpl *****************************
-
-func (ec *executionContext) field_Mutation_createUser_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
-	var err error
-	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "name",
-		func(ctx context.Context, v any) (string, error) {
-			return ec.unmarshalNString2string(ctx, v)
-		})
-	if err != nil {
-		return nil, err
-	}
-	args["name"] = arg0
-	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "email",
-		func(ctx context.Context, v any) (string, error) {
-			return ec.unmarshalNString2string(ctx, v)
-		})
-	if err != nil {
-		return nil, err
-	}
-	args["email"] = arg1
-	return args, nil
-}
 
 func (ec *executionContext) field_Mutation_login_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
@@ -722,7 +684,7 @@ func (ec *executionContext) _AuthPayload_user(ctx context.Context, field graphql
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v *model.User) graphql.Marshaler {
-			return ec.marshalNUser2ᚖgithubᚗcomᚋsoumajitghᚋmobicodeᚋgraphᚋmodelᚐUser(ctx, selections, v)
+			return ec.marshalNUser2ᚖgithubᚗcomᚋsoumajitghᚋmobicodeᚋgraphqlᚋmodelᚐUser(ctx, selections, v)
 		},
 		true,
 		true,
@@ -755,7 +717,7 @@ func (ec *executionContext) _Mutation_register(ctx context.Context, field graphq
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v *model.AuthPayload) graphql.Marshaler {
-			return ec.marshalNAuthPayload2ᚖgithubᚗcomᚋsoumajitghᚋmobicodeᚋgraphᚋmodelᚐAuthPayload(ctx, selections, v)
+			return ec.marshalNAuthPayload2ᚖgithubᚗcomᚋsoumajitghᚋmobicodeᚋgraphqlᚋmodelᚐAuthPayload(ctx, selections, v)
 		},
 		true,
 		true,
@@ -799,7 +761,7 @@ func (ec *executionContext) _Mutation_login(ctx context.Context, field graphql.C
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v *model.AuthPayload) graphql.Marshaler {
-			return ec.marshalNAuthPayload2ᚖgithubᚗcomᚋsoumajitghᚋmobicodeᚋgraphᚋmodelᚐAuthPayload(ctx, selections, v)
+			return ec.marshalNAuthPayload2ᚖgithubᚗcomᚋsoumajitghᚋmobicodeᚋgraphqlᚋmodelᚐAuthPayload(ctx, selections, v)
 		},
 		true,
 		true,
@@ -843,7 +805,7 @@ func (ec *executionContext) _Mutation_refreshToken(ctx context.Context, field gr
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v *model.AuthPayload) graphql.Marshaler {
-			return ec.marshalNAuthPayload2ᚖgithubᚗcomᚋsoumajitghᚋmobicodeᚋgraphᚋmodelᚐAuthPayload(ctx, selections, v)
+			return ec.marshalNAuthPayload2ᚖgithubᚗcomᚋsoumajitghᚋmobicodeᚋgraphqlᚋmodelᚐAuthPayload(ctx, selections, v)
 		},
 		true,
 		true,
@@ -917,50 +879,6 @@ func (ec *executionContext) fieldContext_Mutation_logout(ctx context.Context, fi
 	return fc, nil
 }
 
-func (ec *executionContext) _Mutation_createUser(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.fieldContext_Mutation_createUser(ctx, field)
-		},
-		func(ctx context.Context) (any, error) {
-			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Mutation().CreateUser(ctx, fc.Args["name"].(string), fc.Args["email"].(string))
-		},
-		nil,
-		func(ctx context.Context, selections ast.SelectionSet, v *model.User) graphql.Marshaler {
-			return ec.marshalNUser2ᚖgithubᚗcomᚋsoumajitghᚋmobicodeᚋgraphᚋmodelᚐUser(ctx, selections, v)
-		},
-		true,
-		true,
-	)
-}
-func (ec *executionContext) fieldContext_Mutation_createUser(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Mutation",
-		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.childFields_User(ctx, field)
-		},
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			err = ec.Recover(ctx, r)
-			ec.Error(ctx, err)
-		}
-	}()
-	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Mutation_createUser_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
-		ec.Error(ctx, err)
-		return fc, err
-	}
-	return fc, nil
-}
-
 func (ec *executionContext) _Query_user(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -975,7 +893,7 @@ func (ec *executionContext) _Query_user(ctx context.Context, field graphql.Colle
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v *model.User) graphql.Marshaler {
-			return ec.marshalOUser2ᚖgithubᚗcomᚋsoumajitghᚋmobicodeᚋgraphᚋmodelᚐUser(ctx, selections, v)
+			return ec.marshalOUser2ᚖgithubᚗcomᚋsoumajitghᚋmobicodeᚋgraphqlᚋmodelᚐUser(ctx, selections, v)
 		},
 		true,
 		false,
@@ -2336,13 +2254,6 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "createUser":
-			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
-				return ec._Mutation_createUser(ctx, field)
-			})
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -2886,11 +2797,11 @@ func (ec *executionContext) ___Type(ctx context.Context, sel ast.SelectionSet, o
 
 // region    ***************************** type.gotpl *****************************
 
-func (ec *executionContext) marshalNAuthPayload2githubᚗcomᚋsoumajitghᚋmobicodeᚋgraphᚋmodelᚐAuthPayload(ctx context.Context, sel ast.SelectionSet, v model.AuthPayload) graphql.Marshaler {
+func (ec *executionContext) marshalNAuthPayload2githubᚗcomᚋsoumajitghᚋmobicodeᚋgraphqlᚋmodelᚐAuthPayload(ctx context.Context, sel ast.SelectionSet, v model.AuthPayload) graphql.Marshaler {
 	return ec._AuthPayload(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNAuthPayload2ᚖgithubᚗcomᚋsoumajitghᚋmobicodeᚋgraphᚋmodelᚐAuthPayload(ctx context.Context, sel ast.SelectionSet, v *model.AuthPayload) graphql.Marshaler {
+func (ec *executionContext) marshalNAuthPayload2ᚖgithubᚗcomᚋsoumajitghᚋmobicodeᚋgraphqlᚋmodelᚐAuthPayload(ctx context.Context, sel ast.SelectionSet, v *model.AuthPayload) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -2964,11 +2875,7 @@ func (ec *executionContext) marshalNTime2timeᚐTime(ctx context.Context, sel as
 	return res
 }
 
-func (ec *executionContext) marshalNUser2githubᚗcomᚋsoumajitghᚋmobicodeᚋgraphᚋmodelᚐUser(ctx context.Context, sel ast.SelectionSet, v model.User) graphql.Marshaler {
-	return ec._User(ctx, sel, &v)
-}
-
-func (ec *executionContext) marshalNUser2ᚖgithubᚗcomᚋsoumajitghᚋmobicodeᚋgraphᚋmodelᚐUser(ctx context.Context, sel ast.SelectionSet, v *model.User) graphql.Marshaler {
+func (ec *executionContext) marshalNUser2ᚖgithubᚗcomᚋsoumajitghᚋmobicodeᚋgraphqlᚋmodelᚐUser(ctx context.Context, sel ast.SelectionSet, v *model.User) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -3166,7 +3073,7 @@ func (ec *executionContext) marshalOString2ᚖstring(ctx context.Context, sel as
 	return res
 }
 
-func (ec *executionContext) marshalOUser2ᚖgithubᚗcomᚋsoumajitghᚋmobicodeᚋgraphᚋmodelᚐUser(ctx context.Context, sel ast.SelectionSet, v *model.User) graphql.Marshaler {
+func (ec *executionContext) marshalOUser2ᚖgithubᚗcomᚋsoumajitghᚋmobicodeᚋgraphqlᚋmodelᚐUser(ctx context.Context, sel ast.SelectionSet, v *model.User) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}

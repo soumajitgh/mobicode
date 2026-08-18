@@ -9,6 +9,3 @@ extend type Query {
   user(id: ID!): User
 }
 
-extend type Mutation {
-  createUser(name: String!, email: String!): User!
-}

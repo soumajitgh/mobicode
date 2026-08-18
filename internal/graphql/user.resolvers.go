@@ -11,12 +11,8 @@ import (
 	"github.com/soumajitgh/mobicode/graphql/model"
 )
 
-// CreateUser is the resolver for the createUser field.
-func (r *mutationResolver) CreateUser(ctx context.Context, name string, email string) (*model.User, error) {
-	return r.user.CreateUser(ctx, name, email)
-}
-
 // User is the resolver for the user field.
 func (r *queryResolver) User(ctx context.Context, id string) (*model.User, error) {
 	return r.user.User(ctx, id)
 }
+

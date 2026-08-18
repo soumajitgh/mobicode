@@ -84,7 +84,8 @@ func TestServiceRegisterLoginRefreshLogout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create JWT service: %v", err)
 	}
-	service := NewService(users, refresh, NewPasswordService(), jwt, zap.NewNop())
+	userService := user.NewService(users, zap.NewNop())
+	service := NewService(userService, refresh, NewPasswordService(), jwt, zap.NewNop())
 
 	registered, err := service.Register(context.Background(), "Zoravix", "z@fotopick.in", "password-123")
 	if err != nil {
