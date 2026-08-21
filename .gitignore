@@ -47,6 +47,3 @@ Thumbs.db
 /.pnpm-store/
 /.claude/worktrees/
 /.claude/settings.local.json
-/yaak/*.sqlite*
-/yaak/vendored/
-/yaak/vendored-plugins/

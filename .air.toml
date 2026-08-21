@@ -6,7 +6,7 @@ tmp_dir = "tmp"
   args_bin = ["serve"]
   entrypoint = "./tmp/server"
   delay = 1000
-  exclude_dir = ["data", "docs", "mobile", "tmp", "vendor", "yaak"]
+  exclude_dir = ["data", "docs", "mobile", "tmp", "vendor"]
   include_ext = ["go", "graphqls", "yml"]
   stop_on_error = true
 
