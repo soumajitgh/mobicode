@@ -9,7 +9,7 @@ CONFIG ?= .env
 DEV_API_URL ?= http://localhost:8085
 DEV_GRAPHQL_BODY ?= {"query":"query Viewer { viewer { publicKey } }"}
 
-.PHONY: dev run init build clean test vet format lint check graphql-generate graphql-check \
+.PHONY: dev run init build clean test test-race test-cover vet format lint check graphql-generate graphql-check \
 	migrate-create deps-up deps-down deps-logs mobile-install mobile-dev mobile-check \
 	dev-setup dev-init dev-run dev-sign dev-query
 
@@ -32,6 +32,13 @@ clean:
 
 test:
 	go test ./...
+
+test-race:
+	go test -race ./...
+
+test-cover:
+	go test -coverprofile=coverage.out ./...
+	go tool cover -func=coverage.out
 
 vet:
 	go vet ./...
