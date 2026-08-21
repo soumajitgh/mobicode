@@ -1,0 +1,61 @@
+package setup
+
+templ PageHead(title string, includeHTMX bool) {
+	<head>
+		<meta charset="utf-8"/>
+		<meta name="viewport" content="width=device-width, initial-scale=1"/>
+		<title>{ title }</title>
+		<link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css"/>
+		if includeHTMX {
+			<script src="https://unpkg.com/htmx.org@2.0.8"></script>
+		}
+	</head>
+}
+
+templ SetupPage(qrCode templ.SafeURL, csrf string) {
+	<!doctype html><html data-theme="business">@PageHead("MobiCode setup", true)<body class="min-h-screen bg-base-200">
+		<main class="hero min-h-screen">
+			<section class="card w-full max-w-lg bg-base-100 shadow-xl">
+				<div class="card-body items-center text-center">
+					<h1 class="card-title text-3xl">Pair your MobiCode mobile</h1>
+					<p>Scan this code with the MobiCode app. You will approve the displayed key before setup completes.</p>
+					<img class="rounded-box bg-white p-4" src={ qrCode } alt="MobiCode pairing QR code"/>
+					<input id="setup-csrf" class="hidden" name="csrf" value={ csrf }/>
+					<div id="setup-status" hx-get="/setup/status" hx-trigger="load, every 2s" hx-swap="innerHTML" class="w-full"><span class="loading loading-spinner"></span></div>
+				</div>
+			</section>
+		</main>
+	</body>
+	</html>
+}
+
+templ ResumePage(csrf string) {
+	<!doctype html><html data-theme="business">@PageHead("MobiCode setup", true)<body class="hero min-h-screen bg-base-200">
+		<main class="card w-full max-w-lg bg-base-100 shadow-xl">
+			<div class="card-body text-center">
+				<h1 class="card-title">MobiCode setup</h1>
+				<input id="setup-csrf" class="hidden" name="csrf" value={ csrf }/>
+				<div id="setup-status" hx-get="/setup/status" hx-trigger="load, every 2s" hx-swap="innerHTML"><span class="loading loading-spinner"></span></div>
+			</div>
+		</main>
+	</body>
+	</html>
+}
+
+templ ProgressPage() {
+	<!doctype html><html data-theme="business">@PageHead("Setup in progress", false)<body class="hero min-h-screen bg-base-200"><div class="alert alert-warning max-w-lg">Setup is already in progress. Wait for the current session to expire.</div></body>
+	</html>
+}
+
+templ CompletePage() {
+	<!doctype html><html data-theme="business">@PageHead("Setup complete", false)<body class="hero min-h-screen bg-base-200"><div class="card bg-base-100 shadow-xl"><div class="card-body text-center"><h1 class="card-title text-3xl">Server setup is complete</h1><p>Your paired mobile key is now the only identity allowed to use this server.</p></div></div></body>
+	</html>
+}
+
+templ WaitingFragment() {
+	<div class="alert alert-info"><span>Waiting for the mobile pairing request…</span></div>
+}
+
+templ ConfirmFragment(keyFingerprint string) {
+	<div class="card bg-base-200"><div class="card-body"><p>Approve mobile key <code>{ keyFingerprint }</code>?</p><button class="btn btn-primary" hx-post="/setup/confirm" hx-include="#setup-csrf" hx-target="#setup-status" hx-swap="innerHTML">Approve this mobile</button></div></div>
+}

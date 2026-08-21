@@ -1,58 +1,43 @@
 package auth
 
 import (
-	"context"
+	"errors"
 	"net/http"
-	"strings"
 )
 
-type contextKey struct{}
-
-// UserIDFromContext returns the authenticated user ID when one is present.
-func UserIDFromContext(ctx context.Context) (string, bool) {
-	userID, ok := ctx.Value(contextKey{}).(string)
-	return userID, ok
-}
-
-// Authenticate verifies a supplied bearer token and adds its user ID to the request context.
-// Requests without credentials are allowed so public GraphQL operations remain reachable.
-func Authenticate(jwt *JWTService) func(http.Handler) http.Handler {
+// RequireOwner validates a NIP-98 proof and attaches the configured owner principal.
+// GraphQL is intentionally all-private: invalid authentication stops execution at HTTP.
+func RequireOwner(verifier *NIP98Verifier, owner *OwnerService) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			token := bearerToken(r)
-			if token == "" {
-				next.ServeHTTP(w, r)
-				return
-			}
-			claims, err := jwt.Verify(token)
+			identity, err := owner.Owner(r.Context())
 			if err != nil {
-				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				if errors.Is(err, ErrSetupRequired) {
+					http.Error(w, "server setup required", http.StatusServiceUnavailable)
+					return
+				}
+				http.Error(w, "authentication unavailable", http.StatusInternalServerError)
 				return
 			}
-			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), contextKey{}, claims.UserID)))
-		})
-	}
-}
-
-// RequireAuth rejects requests that do not have a valid bearer token.
-func RequireAuth(jwt *JWTService) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			token := bearerToken(r)
-			claims, err := jwt.Verify(token)
-			if token == "" || err != nil {
-				http.Error(w, "unauthorized", http.StatusUnauthorized)
+			proof, err := verifier.Verify(r)
+			if err != nil {
+				http.Error(w, "authentication required", http.StatusUnauthorized)
 				return
 			}
-			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), contextKey{}, claims.UserID)))
+			if proof.PublicKey != identity.PublicKey {
+				http.Error(w, "authenticated key is not authorized", http.StatusForbidden)
+				return
+			}
+			if err := owner.ClaimReplay(r.Context(), proof.ID, proof.ExpiresAt); err != nil {
+				if errors.Is(err, ErrReplay) {
+					http.Error(w, "authentication proof already used", http.StatusUnauthorized)
+					return
+				}
+				http.Error(w, "authentication unavailable", http.StatusInternalServerError)
+				return
+			}
+			ctx := WithPrincipal(r.Context(), Principal{PublicKey: proof.PublicKey})
+			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
-}
-
-func bearerToken(r *http.Request) string {
-	parts := strings.Fields(r.Header.Get("Authorization"))
-	if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
-		return parts[1]
-	}
-	return ""
 }

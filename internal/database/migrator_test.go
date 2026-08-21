@@ -7,7 +7,7 @@ import (
 	"github.com/soumajitgh/mobicode/internal/config"
 )
 
-func TestMigratorUpCreatesUsersAndIsIdempotent(t *testing.T) {
+func TestMigratorUpCreatesSingleOwnerAuthSchemaAndIsIdempotent(t *testing.T) {
 	databasePath := filepath.Join(t.TempDir(), "app.db")
 	db, err := New(&config.Config{DatabasePath: databasePath})
 	if err != nil {
@@ -41,18 +41,18 @@ func TestMigratorUpCreatesUsersAndIsIdempotent(t *testing.T) {
 	}
 
 	var tables int
-	if err := db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN ('users', 'refresh_tokens')").Scan(&tables).Error; err != nil {
+	if err := db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN ('owner_identity', 'auth_replays', 'setup_sessions')").Scan(&tables).Error; err != nil {
 		t.Fatalf("query schema: %v", err)
 	}
-	if tables != 2 {
-		t.Fatalf("auth table count = %d, want 2", tables)
+	if tables != 3 {
+		t.Fatalf("auth table count = %d, want 3", tables)
 	}
 
-	var passwordHashColumns int
-	if err := db.Raw("SELECT COUNT(*) FROM pragma_table_info('users') WHERE name = 'password_hash'").Scan(&passwordHashColumns).Error; err != nil {
-		t.Fatalf("query users columns: %v", err)
+	var legacyTables int
+	if err := db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN ('users', 'refresh_tokens')").Scan(&legacyTables).Error; err != nil {
+		t.Fatalf("query legacy schema: %v", err)
 	}
-	if passwordHashColumns != 1 {
-		t.Fatalf("password_hash column count = %d, want 1", passwordHashColumns)
+	if legacyTables != 0 {
+		t.Fatalf("legacy auth table count = %d, want 0", legacyTables)
 	}
 }

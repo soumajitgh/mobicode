@@ -38,15 +38,14 @@ Co-locate test files alongside code. Put shared helpers in `internal/testutil/`.
 ```text
 internal/
 ├── auth/
-│   ├── jwt.go
-│   ├── jwt_test.go
+│   ├── nip98.go
+│   ├── nip98_test.go
+│   ├── identity.go
+│   └── middleware.go
+├── setup/
 │   ├── service.go
-│   └── service_test.go
-├── user/
-│   ├── repository.go
-│   ├── repository_test.go
-│   ├── resolver.go
-│   └── service_test.go
+│   ├── handler.go
+│   └── setup.templ
 └── testutil/            # Cross-cutting test setup & fixtures
     ├── database.go
     ├── graphql.go
@@ -60,27 +59,12 @@ internal/
 ## 3. Testing Layers
 
 ### Service & Domain (Primary TDD Boundary)
-- **Scope**: Business logic, validation, authorization, state transitions, token rotation, domain errors.
+- **Scope**: Authorization, setup-session state transitions, replay protection, and domain errors.
 - **Rules**: Must be fast, deterministic, and pure—no DB, HTTP, GraphQL, GORM, or Uber Fx dependencies.
 - **Dependencies**: Use small, consumer-focused interfaces. Prefer handwritten fakes over generated mocks.
 
-```go
-type UserRepository interface {
-    Create(ctx context.Context, user *User) error
-    FindByEmail(ctx context.Context, email string) (*User, error)
-}
-
-type fakeRepository struct {
-    created *User
-    err     error
-}
-
-func (f *fakeRepository) Create(ctx context.Context, user *User) error {
-    if f.err != nil { return f.err }
-    f.created = user
-    return nil
-}
-```
+Use focused fakes only where a service needs to isolate persistence or time; keep
+NIP-98 signature tests deterministic with a fixed private test key.
 
 ### Repositories (Real SQLite)
 - **Scope**: Queries, uniqueness, foreign keys, soft deletes, transactions, database error mapping.
@@ -103,7 +87,7 @@ func NewTestDB(t *testing.T) *gorm.DB {
 - **Rules**: Use `net/http/httptest`. Test API boundary behavior only—do **not** duplicate detailed service business rule variations.
 
 ### Auth & Middleware
-- Test password hashing/verification, JWT parsing/expiration, refresh token rotation, and Chi middleware using `httptest`. Test Mobicode logic, not standard lib/bcrypt internals.
+- Test NIP-98 event parsing/signature verification, request binding, replay rejection, setup-session state transitions, and Chi middleware using `httptest`.
 
 ### Uber Fx
 - Do **not** test `fx.Provide` calls or container wiring directly. Instantiate constructors directly (`NewService(repo)`). Optional: single app-level dependency graph start/stop integration test.
@@ -117,7 +101,7 @@ func NewTestDB(t *testing.T) *gorm.DB {
 | Repositories (in service unit tests) | GORM & SQLite internals |
 | Clock / Time abstraction (`Clock` interface) | Zap logger |
 | Random token generators | Chi router & `httptest` internals |
-| External HTTP API clients / Storage / Email | `gqlgen` generated code |
+| External HTTP API clients / storage | `gqlgen` and `templ` generated code |
 | Remote agent infrastructure | Standard library & bcrypt |
 
 ### Time & Environment
@@ -151,20 +135,21 @@ func NewTestDB(t *testing.T) *gorm.DB {
 Use `Test<Type>_<Method>_<Scenario>` and subtests (`t.Run`):
 
 ```go
-func TestService_Register(t *testing.T) {
+func TestNIP98Verifier_RejectsExpiredProof(t *testing.T) {
     tests := []struct {
         name    string
-        email   string
+        createdAt time.Time
         wantErr bool
     }{
-        {name: "valid user", email: "john@example.com", wantErr: false},
-        {name: "invalid email", email: "invalid", wantErr: true},
+        {name: "fresh proof", createdAt: now, wantErr: false},
+        {name: "expired proof", createdAt: now.Add(-2*time.Minute), wantErr: true},
     }
 
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
             t.Parallel()
-            err := ValidateEmail(tt.email)
+            request := signedRequest(t, privateKey, tt.createdAt, apiURL, body)
+            _, err := verifier.Verify(request)
             if tt.wantErr {
                 require.Error(t, err)
                 return
@@ -177,7 +162,7 @@ func TestService_Register(t *testing.T) {
 
 ### Assertions & Errors
 - Use `require.NoError(t, err)` for prerequisite checks; use `assert.Equal` for non-fatal checks.
-- Assert sentinel/typed errors with `require.ErrorIs(t, err, ErrUserNotFound)` instead of matching string messages.
+- Assert sentinel/typed errors with `errors.Is(t, err, auth.ErrReplay)` instead of matching string messages.
 
 ### Concurrency & Independence
 - Call `t.Parallel()` on pure, thread-safe unit tests. Avoid parallelism when sharing DB or global state.
@@ -192,7 +177,7 @@ func TestService_Register(t *testing.T) {
 go test ./...
 
 # Run single package / single test
-go test ./internal/user -run TestService_Register
+go test ./internal/auth -run TestNIP98Verifier
 
 # Run with race detection (crucial for concurrency)
 go test -race ./...

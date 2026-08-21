@@ -23,6 +23,14 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
+	  "expo-router",
+      [
+        "expo-secure-store",
+        {
+          "configureAndroidBackup": true,
+          "faceIDPermission": "Allow MobiCode to unlock your signing key."
+        }
+      ],
       [
         "expo-splash-screen",
         {

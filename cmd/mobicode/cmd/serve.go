@@ -15,7 +15,7 @@ import (
 	"github.com/soumajitgh/mobicode/internal/health"
 	"github.com/soumajitgh/mobicode/internal/logger"
 	"github.com/soumajitgh/mobicode/internal/server"
-	"github.com/soumajitgh/mobicode/internal/user"
+	"github.com/soumajitgh/mobicode/internal/setup"
 )
 
 var serveCmd = &cobra.Command{
@@ -33,8 +33,8 @@ var serveCmd = &cobra.Command{
 			database.Module,
 			server.Module,
 			health.Module,
-			user.Module,
 			graphql.Module,
+			setup.Module,
 			fx.WithLogger(func(log *zap.Logger) fxevent.Logger { return logger.NewFxLogger(log) }),
 		)
 		if err := app.Err(); err != nil {

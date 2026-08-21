@@ -1,0 +1,32 @@
+name: Repository housekeeping
+
+on:
+  schedule:
+    - cron: '23 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  mark-stale-work:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mark inactive issues and pull requests as stale
+        uses: actions/stale@v10
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          days-before-stale: 60
+          days-before-close: 14
+          stale-issue-message: >-
+            This issue has been inactive for 60 days and will close in 14 days
+            unless activity resumes or the stale label is removed.
+          close-issue-message: Closing due to inactivity.
+          stale-pr-message: >-
+            This pull request has been inactive for 60 days and will close in
+            14 days unless activity resumes or the stale label is removed.
+          close-pr-message: Closing due to inactivity.
+          exempt-issue-labels: security,pinned,keep-open
+          exempt-pr-labels: security,pinned,keep-open
+          operations-per-run: 100

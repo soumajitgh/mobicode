@@ -13,13 +13,6 @@ import (
 	"github.com/soumajitgh/mobicode/internal/config"
 )
 
-// NewRouter creates the shared HTTP router.
-func NewRouter() *chi.Mux {
-	r := chi.NewRouter()
-	useDefaultMiddleware(r)
-	return r
-}
-
 // NewHTTPServer starts and gracefully stops the HTTP server with the Fx app.
 func NewHTTPServer(lc fx.Lifecycle, mux *chi.Mux, cfg *config.Config, log *zap.Logger) *http.Server {
 	srv := &http.Server{Addr: ":" + cfg.Port, Handler: mux}
