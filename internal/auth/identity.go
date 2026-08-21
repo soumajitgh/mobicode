@@ -23,6 +23,9 @@ type OwnerIdentity struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 
+// TableName matches the singular production table created by the SQL migration.
+func (OwnerIdentity) TableName() string { return "owner_identity" }
+
 type AuthReplay struct {
 	EventID   string    `gorm:"primaryKey"`
 	ExpiresAt time.Time `gorm:"index"`

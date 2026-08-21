@@ -1,4 +1,4 @@
-package auth
+package auth_test
 
 import (
 	"context"
@@ -9,31 +9,25 @@ import (
 	"time"
 
 	"go.uber.org/zap"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 
+	"github.com/soumajitgh/mobicode/internal/auth"
 	"github.com/soumajitgh/mobicode/internal/config"
+	"github.com/soumajitgh/mobicode/internal/testutil"
 )
 
 func TestDevelopmentNsecBootstrapsOwnerAndSignsRequests(t *testing.T) {
-	nsec, publicKey, err := GenerateNsec()
+	nsec, publicKey, err := auth.GenerateNsec()
 	if err != nil {
 		t.Fatalf("generate nsec: %v", err)
 	}
-	if got, err := PublicKeyFromNsec(nsec); err != nil || got != publicKey {
+	if got, err := auth.PublicKeyFromNsec(nsec); err != nil || got != publicKey {
 		t.Fatalf("decode generated nsec: got %q, %v", got, err)
 	}
 
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	if err := db.AutoMigrate(&OwnerIdentity{}); err != nil {
-		t.Fatalf("migrate owner identity: %v", err)
-	}
-	owner := NewOwnerService(NewOwnerRepository(db))
+	db := testutil.NewDB(t)
+	owner := auth.NewOwnerService(auth.NewOwnerRepository(db))
 	cfg := &config.Config{Env: "development", DevNsec: nsec}
-	if err := BootstrapDevelopmentIdentity(cfg, owner, zap.NewNop()); err != nil {
+	if err := auth.BootstrapDevelopmentIdentity(cfg, owner, zap.NewNop()); err != nil {
 		t.Fatalf("bootstrap development identity: %v", err)
 	}
 	identity, err := owner.Owner(context.Background())
@@ -43,14 +37,19 @@ func TestDevelopmentNsecBootstrapsOwnerAndSignsRequests(t *testing.T) {
 
 	body := `{"query":"query Viewer { viewer { publicKey } }"}`
 	now := time.Unix(1_780_000_000, 0)
-	header, err := CreateNIP98Authorization(nsec, "https://example.com/graphql", http.MethodPost, body, now)
+	header, err := auth.CreateNIP98Authorization(nsec, "https://example.com/graphql", http.MethodPost, body, now)
 	if err != nil {
 		t.Fatalf("create authorization: %v", err)
 	}
 	request := httptest.NewRequest(http.MethodPost, "/graphql", strings.NewReader(body))
 	request.Header.Set("Authorization", header)
-	verifier := NewNIP98Verifier(&config.Config{PublicBaseURL: "https://example.com"})
-	verifier.now = func() time.Time { return now }
+	verifier := auth.NewNIP98Verifier(&config.Config{PublicBaseURL: "https://example.com"})
+	// The public verifier uses the production clock; create a fresh proof for this integration check.
+	header, err = auth.CreateNIP98Authorization(nsec, "https://example.com/graphql", http.MethodPost, body, time.Now())
+	if err != nil {
+		t.Fatalf("create current authorization: %v", err)
+	}
+	request.Header.Set("Authorization", header)
 	proof, err := verifier.Verify(request)
 	if err != nil || proof.PublicKey != publicKey {
 		t.Fatalf("verify development authorization: %#v, %v", proof, err)
