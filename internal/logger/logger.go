@@ -6,6 +6,7 @@ import (
 
 	"go.uber.org/fx"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
 	"github.com/soumajitgh/mobicode/internal/config"
 )
@@ -19,7 +20,11 @@ func New(lc fx.Lifecycle, cfg *config.Config) (*zap.Logger, error) {
 	if cfg.Env == "production" {
 		log, err = zap.NewProduction()
 	} else {
-		log, err = zap.NewDevelopment()
+		developmentConfig := zap.NewDevelopmentConfig()
+		developmentConfig.EncoderConfig.TimeKey = "time"
+		developmentConfig.EncoderConfig.EncodeTime = zapcore.TimeEncoderOfLayout("15:04:05")
+		developmentConfig.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
+		log, err = developmentConfig.Build(zap.WithCaller(false))
 	}
 	if err != nil {
 		return nil, err

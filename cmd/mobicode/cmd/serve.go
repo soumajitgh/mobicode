@@ -5,8 +5,6 @@ import (
 
 	"github.com/spf13/cobra"
 	"go.uber.org/fx"
-	"go.uber.org/fx/fxevent"
-	"go.uber.org/zap"
 
 	"github.com/soumajitgh/mobicode/internal/auth"
 	"github.com/soumajitgh/mobicode/internal/config"
@@ -35,7 +33,7 @@ var serveCmd = &cobra.Command{
 			health.Module,
 			graphql.Module,
 			setup.Module,
-			fx.WithLogger(func(log *zap.Logger) fxevent.Logger { return logger.NewFxLogger(log) }),
+			fx.WithLogger(logger.NewFxLogger),
 		)
 		if err := app.Err(); err != nil {
 			return err
