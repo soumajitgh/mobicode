@@ -7,10 +7,9 @@ import (
 	"github.com/soumajitgh/mobicode/graphql/generated"
 )
 
-// NewServer creates the GraphQL handler configured with the auth guard and ErrorPresenter.
+// NewServer creates the GraphQL handler configured with its ErrorPresenter.
 func NewServer(resolver *Resolver, log *zap.Logger) *handler.Server {
 	server := handler.NewDefaultServer(generated.NewExecutableSchema(generated.Config{Resolvers: resolver}))
-	server.AroundRootFields(AuthMiddleware())
 	server.SetErrorPresenter(ErrorPresenter(log))
 	return server
 }

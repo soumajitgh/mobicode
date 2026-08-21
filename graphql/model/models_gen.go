@@ -6,21 +6,10 @@ import (
 	"time"
 )
 
-type AuthPayload struct {
-	AccessToken  string `json:"accessToken"`
-	RefreshToken string `json:"refreshToken"`
-	User         *User  `json:"user"`
-}
-
-type Mutation struct {
+type Identity struct {
+	PublicKey string    `json:"publicKey"`
+	CreatedAt time.Time `json:"createdAt"`
 }
 
 type Query struct {
-}
-
-type User struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Email     string    `json:"email"`
-	CreatedAt time.Time `json:"createdAt"`
 }

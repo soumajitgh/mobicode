@@ -4,8 +4,7 @@ import "context"
 
 // Principal represents the authenticated caller identity.
 type Principal struct {
-	UserID    string
-	SessionID string
+	PublicKey string
 }
 
 type contextKey struct{}

@@ -3,6 +3,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -12,12 +13,11 @@ import (
 
 // Config contains API settings.
 type Config struct {
-	Port           string
-	Env            string
-	DatabasePath   string
-	JWTSecret      string
-	DevAuthEnabled bool
-	DevUserID      string
+	Port          string
+	Env           string
+	DatabasePath  string
+	PublicBaseURL string
+	DevNsec       string
 }
 
 // New constructs configuration from environment values.
@@ -58,18 +58,28 @@ func Load(path string) (*Config, error) {
 	if databasePath == "" {
 		databasePath = "data/app.db"
 	}
-	jwtSecret := value("JWT_SECRET")
-
-	devAuthEnabled, _ := strconv.ParseBool(value("DEV_AUTH_ENABLED"))
-	devUserID := strings.TrimSpace(value("DEV_USER_ID"))
+	publicBaseURL := strings.TrimRight(strings.TrimSpace(value("PUBLIC_BASE_URL")), "/")
+	devNsec := strings.TrimSpace(value("DEV_NSEC"))
+	if publicBaseURL == "" {
+		publicBaseURL = "http://localhost:" + port
+	}
+	parsedPublicURL, err := url.Parse(publicBaseURL)
+	if err != nil || parsedPublicURL.Scheme == "" || parsedPublicURL.Host == "" || (parsedPublicURL.Path != "" && parsedPublicURL.Path != "/") || parsedPublicURL.RawQuery != "" || parsedPublicURL.Fragment != "" {
+		return nil, fmt.Errorf("PUBLIC_BASE_URL must be an absolute origin without query or fragment")
+	}
+	if env == "production" && parsedPublicURL.Scheme != "https" {
+		return nil, fmt.Errorf("PUBLIC_BASE_URL must use https in production")
+	}
+	if devNsec != "" && env != "development" {
+		return nil, fmt.Errorf("DEV_NSEC may only be used in development")
+	}
 
 	return &Config{
-		Port:           port,
-		Env:            env,
-		DatabasePath:   databasePath,
-		JWTSecret:      jwtSecret,
-		DevAuthEnabled: devAuthEnabled,
-		DevUserID:      devUserID,
+		Port:          port,
+		Env:           env,
+		DatabasePath:  databasePath,
+		PublicBaseURL: publicBaseURL,
+		DevNsec:       devNsec,
 	}, nil
 }
 

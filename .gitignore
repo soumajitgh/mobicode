@@ -41,6 +41,9 @@ Thumbs.db
 
 # Local configuration
 .env
+/mobile/.env
+/mobile/.env.*
+!/mobile/.env.example
 /.pnpm-store/
 /.claude/worktrees/
 /.claude/settings.local.json

@@ -20,7 +20,6 @@ func NewHTTPServer(lc fx.Lifecycle, mux *chi.Mux, cfg *config.Config, log *zap.L
 	lc.Append(fx.Hook{
 		OnStart: func(context.Context) error {
 			log.Info("starting http server", zap.String("addr", srv.Addr), zap.String("env", cfg.Env))
-			logDevelopmentUserID(log, cfg)
 			go func() {
 				if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 					log.Error("server error", zap.Error(err))
@@ -37,10 +36,4 @@ func NewHTTPServer(lc fx.Lifecycle, mux *chi.Mux, cfg *config.Config, log *zap.L
 	})
 
 	return srv
-}
-
-func logDevelopmentUserID(log *zap.Logger, cfg *config.Config) {
-	if cfg.Env == "development" {
-		log.Info("development user ID configured for bearer authentication", zap.String("dev_user_id", cfg.DevUserID))
-	}
 }

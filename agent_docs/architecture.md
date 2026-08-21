@@ -22,14 +22,14 @@ mobicode/
 │   ├── generated/       # Generated GraphQL execution engine code
 │   └── model/           # Generated Go structs for GraphQL schema types
 ├── internal/            # Core private Go packages
-│   ├── auth/            # Authentication, JWT, bcrypt, refresh token management
+│   ├── auth/            # NIP-98 verification, owner identity, replay protection
 │   ├── config/          # Configuration loader (.env and environment variables)
 │   ├── database/        # GORM SQLite setup and migration verifier
 │   ├── graphql/         # GraphQL HTTP handlers & custom error presenter
 │   ├── health/          # Health check endpoint handlers (/health)
 │   ├── logger/          # Zap structured logger and Fx logger integration
 │   ├── server/          # Chi HTTP router and server lifecycle hooks
-│   └── user/            # User domain models, repositories, and services
+│   └── setup/           # templ + HTMX one-time mobile pairing flow
 ├── mobile/              # Expo / React Native mobile client application
 │   ├── assets/          # Mobile app static assets (icons, fonts, images)
 │   └── src/             # React Native UI component source code
@@ -53,6 +53,7 @@ Contains command-line entry points for the Go application.
   - [`init.go`](file:///Users/soumajit/Developer/projects/mobicode/cmd/mobicode/cmd/init.go): Initializes database schema and runs pending SQL migrations.
   - [`serve.go`](file:///Users/soumajit/Developer/projects/mobicode/cmd/mobicode/cmd/serve.go): Starts the API server using Fx dependency injection.
   - [`version.go`](file:///Users/soumajit/Developer/projects/mobicode/cmd/mobicode/cmd/version.go): Outputs binary version information.
+  - `identity.go`: Explicit reset command for a lost or compromised owner key.
 
 ### [`data/`](file:///Users/soumajit/Developer/projects/mobicode/data)
 Runtime directory used to store local SQLite database files (e.g., `data/app.db`).
@@ -72,22 +73,19 @@ GraphQL definitions and auto-generated code produced by `gqlgen`.
 ### [`internal/`](file:///Users/soumajit/Developer/projects/mobicode/internal)
 Private application code enforceably isolated by Go's `internal` package visibility rules.
 
-- [`internal/auth/`](file:///Users/soumajit/Developer/projects/mobicode/internal/auth): Authentication domain logic:
-  - JWT creation and validation ([jwt.go](file:///Users/soumajit/Developer/projects/mobicode/internal/auth/jwt.go))
-  - Password hashing with bcrypt ([password.go](file:///Users/soumajit/Developer/projects/mobicode/internal/auth/password.go))
-  - Refresh token rotation & hashing ([service.go](file:///Users/soumajit/Developer/projects/mobicode/internal/auth/service.go), [repository.go](file:///Users/soumajit/Developer/projects/mobicode/internal/auth/repository.go))
-  - Authentication HTTP middlewares ([middleware.go](file:///Users/soumajit/Developer/projects/mobicode/internal/auth/middleware.go))
+- [`internal/auth/`](file:///Users/soumajit/Developer/projects/mobicode/internal/auth): Single-owner NIP-98 verification, BIP-340 signature checks, and replay protection.
 - [`internal/config/`](file:///Users/soumajit/Developer/projects/mobicode/internal/config): Parses runtime configuration from environment variables and `.env` files ([config.go](file:///Users/soumajit/Developer/projects/mobicode/internal/config/config.go)).
 - [`internal/database/`](file:///Users/soumajit/Developer/projects/mobicode/internal/database): Manages SQLite connections with GORM ([connection.go](file:///Users/soumajit/Developer/projects/mobicode/internal/database/connection.go)) and runs/verifies embedded SQL migrations ([migrator.go](file:///Users/soumajit/Developer/projects/mobicode/internal/database/migrator.go)).
 - [`internal/graphql/`](file:///Users/soumajit/Developer/projects/mobicode/internal/graphql): Assembles GraphQL server handlers ([handler.go](file:///Users/soumajit/Developer/projects/mobicode/internal/graphql/handler.go)), custom error presenter, and binds GraphQL resolvers.
 - [`internal/health/`](file:///Users/soumajit/Developer/projects/mobicode/internal/health): Implements REST health check handler (`/health`).
 - [`internal/logger/`](file:///Users/soumajit/Developer/projects/mobicode/internal/logger): Configures Uber Zap logger and Fx framework event logger.
-- [`internal/server/`](file:///Users/soumajit/Developer/projects/mobicode/internal/server): Configures the Chi HTTP router ([middleware.go](file:///Users/soumajit/Developer/projects/mobicode/internal/server/middleware.go)) and HTTP server lifecycle hooks ([server.go](file:///Users/soumajit/Developer/projects/mobicode/internal/server/server.go)).
-- [`internal/user/`](file:///Users/soumajit/Developer/projects/mobicode/internal/user): User domain model, repository layer, service business logic, and user GraphQL resolver.
+- [`internal/server/`](file:///Users/soumajit/Developer/projects/mobicode/internal/server): Configures the Chi HTTP router and HTTP server lifecycle hooks.
+- [`internal/setup/`](file:///Users/soumajit/Developer/projects/mobicode/internal/setup): Typed `templ` components, HTMX fragments, browser-session setup state, and mobile QR pairing routes.
 
 ### [`mobile/`](file:///Users/soumajit/Developer/projects/mobicode/mobile)
 Expo React Native mobile client application.
-- [`mobile/src/`](file:///Users/soumajit/Developer/projects/mobicode/mobile/src): Application source code ([App.tsx](file:///Users/soumajit/Developer/projects/mobicode/mobile/src/App.tsx)).
+- [`mobile/src/app/`](file:///Users/soumajit/Developer/projects/mobicode/mobile/src/app): Expo Router routes, including the `mobicode://pair` deep-link route.
+- [`mobile/src/features/`](file:///Users/soumajit/Developer/projects/mobicode/mobile/src/features): Secure key storage and signed API client implementation.
 - [`mobile/assets/`](file:///Users/soumajit/Developer/projects/mobicode/mobile/assets): Static assets such as images, fonts, and icons.
 
 ### [`tmp/`](file:///Users/soumajit/Developer/projects/mobicode/tmp)

@@ -4,11 +4,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	"go.uber.org/zap"
-	"go.uber.org/zap/zaptest/observer"
-
-	"github.com/soumajitgh/mobicode/internal/config"
 )
 
 func TestNewRouterMiddleware(t *testing.T) {
@@ -28,27 +23,5 @@ func TestNewRouterMiddleware(t *testing.T) {
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("healthz status = %d, want %d", rec.Code, http.StatusOK)
-	}
-}
-
-func TestLogDevelopmentUserID(t *testing.T) {
-	core, logs := observer.New(zap.InfoLevel)
-	logDevelopmentUserID(zap.New(core), &config.Config{Env: "development", DevUserID: "dev-user-123"})
-
-	entries := logs.FilterMessage("development user ID configured for bearer authentication").All()
-	if len(entries) != 1 {
-		t.Fatalf("development user ID log entries = %d, want 1", len(entries))
-	}
-	if got := entries[0].ContextMap()["dev_user_id"]; got != "dev-user-123" {
-		t.Fatalf("logged dev_user_id = %v, want %q", got, "dev-user-123")
-	}
-}
-
-func TestLogDevelopmentUserIDSkipsNonDevelopment(t *testing.T) {
-	core, logs := observer.New(zap.InfoLevel)
-	logDevelopmentUserID(zap.New(core), &config.Config{Env: "production", DevUserID: "dev-user-123"})
-
-	if got := logs.FilterMessage("development user ID configured for bearer authentication").Len(); got != 0 {
-		t.Fatalf("development user ID log entries = %d, want 0", got)
 	}
 }

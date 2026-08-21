@@ -3,15 +3,13 @@ package graphql
 
 import (
 	"github.com/soumajitgh/mobicode/internal/auth"
-	"github.com/soumajitgh/mobicode/internal/user"
 )
 
 // Resolver composes feature resolvers for gqlgen's executable schema.
 type Resolver struct {
-	user *user.Resolver
-	auth *auth.Resolver
+	owner *auth.OwnerService
 }
 
-func NewResolver(userResolver *user.Resolver, authResolver *auth.Resolver) *Resolver {
-	return &Resolver{user: userResolver, auth: authResolver}
+func NewResolver(owner *auth.OwnerService) *Resolver {
+	return &Resolver{owner: owner}
 }

@@ -1,5 +1,10 @@
 scalar Time
 
-type Query
+type Identity {
+  publicKey: String!
+  createdAt: Time!
+}
 
-type Mutation
+type Query {
+  viewer: Identity!
+}

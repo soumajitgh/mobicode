@@ -5,8 +5,8 @@ sidebar_position: 1
 # Mobicode documentation
 
 Mobicode is a self-hosted, mobile-first coding-agent API. It ships as a single
-Go binary with a GraphQL API, SQLite persistence, and email/password
-authentication.
+Go binary with a GraphQL API, SQLite persistence, and a single mobile-owned
+Nostr identity.
 
 ## Getting Started
 
@@ -18,13 +18,18 @@ cd mobicode
 cp .env.example .env
 ```
 
-Set `JWT_SECRET` to a secure value of at least 32 bytes, then initialize and
+Set `PUBLIC_BASE_URL` to the API's canonical public origin, then initialize and
 start the API:
+
+```sh
+PUBLIC_BASE_URL=https://example.com
+```
 
 ```sh
 go run ./cmd/mobicode init --config .env
 go run ./cmd/mobicode serve --config .env
 ```
 
-The GraphQL API is served at `http://localhost:8080/graphql`, and health checks
-are available at `http://localhost:8080/health`.
+Open `/setup` once the server is running, scan its QR code with the mobile app,
+and approve the displayed public-key fingerprint. The paired mobile key signs
+all GraphQL requests with NIP-98. Health checks are available at `/health`.
