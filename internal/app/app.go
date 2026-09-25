@@ -7,13 +7,14 @@ import (
 	appgraphql "github.com/soumajitgh/mobicode/internal/graphql"
 	"github.com/soumajitgh/mobicode/internal/health"
 	apphttp "github.com/soumajitgh/mobicode/internal/http"
+	"github.com/soumajitgh/mobicode/internal/store"
 	"github.com/soumajitgh/mobicode/internal/web/handlers"
 )
 
 // New assembles dependencies for the HTTP application.
-func New() http.Handler {
+func New(persistence *store.Store) http.Handler {
 	healthService := &health.Service{}
-	resolver := &appgraphql.Resolver{HealthService: healthService}
+	resolver := &appgraphql.Resolver{HealthService: healthService, Store: persistence}
 	webHandler := &handlers.Handler{HealthService: healthService}
 	return apphttp.NewRouter(
 		resolver,
