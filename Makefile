@@ -1,4 +1,4 @@
-.PHONY: help server/dev server/build server/fmt server/check gql templ shadcn generate web/install web/build web/watch web/serve mobile/install mobile/start mobile/android mobile/ios mobile/web mobile/lint mobile/typecheck website/install website/start website/build
+.PHONY: help init server/dev server/build server/fmt server/check gql templ shadcn generate web/install web/build web/watch web/serve mobile/install mobile/start mobile/android mobile/ios mobile/web mobile/lint mobile/typecheck website/install website/start website/build
 
 GO ?= go
 PNPM ?= pnpm
@@ -6,6 +6,8 @@ WEB_PORT ?= 8080
 
 help:
 	@printf '%s\n' \
+	  'Setup:' \
+	  '  make init               Set up a fresh clone (Go, web, mobile, website)' \
 	  'Server:' \
 	  '  make server/dev         Run the Go API (MOBICODE_SERVER_PORT=8080 by default)' \
 	  '  make server/build       Build bin/mobicode-server' \
@@ -31,6 +33,9 @@ help:
 	  '  make website/install    Install locked dependencies' \
 	  '  make website/start      Start Docusaurus' \
 	  '  make website/build      Build the static site'
+
+init:
+	@GO="$(GO)" PNPM="$(PNPM)" sh scripts/init.sh
 
 server/dev: web/build
 	$(GO) run ./cmd/server

@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -14,20 +14,35 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/soumajitgh/mobicode/internal/app"
+	applogger "github.com/soumajitgh/mobicode/internal/logger"
 	"github.com/soumajitgh/mobicode/internal/store"
+	"go.uber.org/zap"
 	"gorm.io/gorm/logger"
 )
 
 func main() {
-	if err := run(); err != nil {
-		log.Fatal(err)
-	}
+	os.Exit(start())
 }
 
-func run() error {
+func start() int {
 	if err := godotenv.Load(); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("load .env: %w", err)
+		fmt.Fprintf(os.Stderr, "load .env: %v\n", err)
+		return 1
 	}
+	log, err := applogger.New(os.Getenv("MOBICODE_SERVER_ENV"))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	defer log.Sync()
+	if err := run(log); err != nil {
+		log.Error("server failed", zap.Error(err))
+		return 1
+	}
+	return 0
+}
+
+func run(log *zap.Logger) error {
 	logLevel, err := parseGORMLogLevel(os.Getenv("MOBICODE_SERVER_DB_LOG_LEVEL"))
 	if err != nil {
 		return err
@@ -44,7 +59,7 @@ func run() error {
 	}
 	defer func() {
 		if err := persistence.Close(); err != nil {
-			log.Printf("store shutdown: %v", err)
+			log.Error("store shutdown failed", zap.Error(err))
 		}
 	}()
 
@@ -56,23 +71,34 @@ func run() error {
 
 	httpServer := &http.Server{
 		Addr:              addr,
-		Handler:           app.New(persistence),
+		Handler:           app.New(persistence, log),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
+	shutdownDone := make(chan struct{})
 	go func() {
+		defer close(shutdownDone)
 		<-ctx.Done()
+		log.Info("server shutting down")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := httpServer.Shutdown(shutdownCtx); err != nil {
-			log.Printf("server shutdown: %v", err)
+			log.Error("server shutdown failed", zap.Error(err))
 		}
 	}()
 
-	log.Printf("listening on %s", addr)
-	if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		return fmt.Errorf("listen HTTP: %w", err)
+	}
+	log.Info("server started", zap.String("address", addr))
+	if err := httpServer.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return fmt.Errorf("serve HTTP: %w", err)
 	}
+	if ctx.Err() != nil {
+		<-shutdownDone
+	}
+	log.Info("server stopped")
 	return nil
 }
 
