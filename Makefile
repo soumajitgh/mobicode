@@ -1,4 +1,4 @@
-.PHONY: help server/dev server/build server/fmt server/check mobile/install mobile/start mobile/android mobile/ios mobile/web mobile/lint mobile/typecheck website/install website/start website/build
+.PHONY: help server/dev server/build server/fmt server/check gql generate mobile/install mobile/start mobile/android mobile/ios mobile/web mobile/lint mobile/typecheck website/install website/start website/build
 
 GO ?= go
 NPM ?= npm
@@ -10,6 +10,8 @@ help:
 	  '  make server/build       Build bin/mobicode-server' \
 	  '  make server/fmt         Format Go source' \
 	  '  make server/check       Run go vet' \
+	  '  make gql                Generate GraphQL code' \
+	  '  make generate           Run all code generators' \
 	  'Mobile:' \
 	  '  make mobile/install     Install locked dependencies' \
 	  '  make mobile/start       Start Expo' \
@@ -35,6 +37,11 @@ server/fmt:
 
 server/check:
 	$(GO) vet ./...
+
+gql:
+	$(GO) run github.com/99designs/gqlgen generate
+
+generate: gql
 
 mobile/install:
 	$(NPM) --prefix mobile ci

@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
-	apihttp "github.com/soumajitgh/mobicode/internal/http"
+	"github.com/soumajitgh/mobicode/internal/app"
 )
 
 func main() {
@@ -27,7 +27,7 @@ func main() {
 
 	httpServer := &http.Server{
 		Addr:              addr,
-		Handler:           apihttp.NewRouter(),
+		Handler:           app.New(),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 

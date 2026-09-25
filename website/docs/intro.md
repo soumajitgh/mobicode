@@ -11,7 +11,8 @@ MobiCode is a mobile first coding agent for on the go development. This reposito
 | Path | Role |
 | --- | --- |
 | `cmd/server` | Runnable Go server entrypoint |
-| `internal/http` | Chi router, middleware, and handlers |
+| `internal/http` | Chi router, middleware, and GraphQL transport |
+| `internal/graphql` | gqlgen schema, generated code, and resolvers |
 | `mobile` | Expo and React Native application using gluestack UI |
 | `website` | This Docusaurus site |
 
@@ -25,6 +26,14 @@ go run ./cmd/server
 ```
 
 The server listens on port 8080 by default. Set `MOBICODE_SERVER_PORT` in `.env` or your shell to change it. Server variables use the `MOBICODE_SERVER_*` prefix; mobile variables use `MOBICODE_MOBILE_*`. `GET /healthz` returns `ok`.
+
+Send GraphQL queries as JSON to `POST /mobile/graphql`. For example:
+
+```json
+{"query":"{ health { status } }"}
+```
+
+Set `MOBICODE_SERVER_PLAYGROUND=true` to enable the playground at `/mobile/graphql/playground` for localhost clients. To add a GraphQL field, edit a feature schema in `internal/graphql/schema`, run `make gql`, and implement the generated resolver. Application services are assembled in `internal/app` and injected into the resolver.
 
 ## Run the mobile app
 
