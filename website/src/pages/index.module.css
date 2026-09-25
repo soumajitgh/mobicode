@@ -1,0 +1,10 @@
+.hero {
+  padding: 6rem 0;
+  background: linear-gradient(135deg, #101b35, #243d73);
+  color: #fff;
+}
+.hero h1 {font-size: clamp(2.5rem, 7vw, 4.5rem);}
+.hero p {font-size: 1.25rem; max-width: 40rem;}
+.actions {display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 2rem;}
+.columns {display: grid; grid-template-columns: repeat(3, 1fr); gap: 2rem; padding-top: 3rem; padding-bottom: 3rem;}
+@media (max-width: 720px) {.columns {grid-template-columns: 1fr;}}
