@@ -5,14 +5,22 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	appgraphql "github.com/soumajitgh/mobicode/internal/graphql"
 	"github.com/soumajitgh/mobicode/internal/health"
+	"github.com/soumajitgh/mobicode/internal/web/handlers"
 )
 
 func testRouter(enablePlayground bool) http.Handler {
-	return NewRouter(&appgraphql.Resolver{HealthService: &health.Service{}}, enablePlayground)
+	healthService := &health.Service{}
+	return NewRouter(
+		&appgraphql.Resolver{HealthService: healthService},
+		&handlers.Handler{HealthService: healthService},
+		enablePlayground,
+		false,
+	)
 }
 
 func TestHealthRoute(t *testing.T) {
@@ -69,6 +77,34 @@ func TestGraphQLTransports(t *testing.T) {
 			testRouter(false).ServeHTTP(recorder, request)
 			if recorder.Code != test.wantStatus {
 				t.Fatalf("status = %d, want %d; body = %s", recorder.Code, test.wantStatus, recorder.Body.String())
+			}
+		})
+	}
+}
+
+func TestWebRoutes(t *testing.T) {
+	for _, test := range []struct {
+		path        string
+		contentType string
+		contains    string
+	}{
+		{path: "/", contentType: "text/html", contains: "hx-get=\"/partials/status\""},
+		{path: "/partials/status", contentType: "text/html", contains: "Server status: ok"},
+		{path: "/assets/css/app.css", contentType: "text/css", contains: ".bg-background"},
+		{path: "/assets/js/htmx.min.js", contentType: "text/javascript", contains: "htmx"},
+	} {
+		t.Run(test.path, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodGet, test.path, nil)
+			recorder := httptest.NewRecorder()
+			testRouter(false).ServeHTTP(recorder, request)
+			if recorder.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
+			}
+			if !strings.HasPrefix(recorder.Header().Get("Content-Type"), test.contentType) {
+				t.Fatalf("content type = %q, want prefix %q", recorder.Header().Get("Content-Type"), test.contentType)
+			}
+			if !strings.Contains(recorder.Body.String(), test.contains) {
+				t.Fatalf("response for %s is missing %q", test.path, test.contains)
 			}
 		})
 	}

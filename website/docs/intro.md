@@ -13,6 +13,8 @@ MobiCode is a mobile first coding agent for on the go development. This reposito
 | `cmd/server` | Runnable Go server entrypoint |
 | `internal/http` | Chi router, middleware, and GraphQL transport |
 | `internal/graphql` | gqlgen schema, generated code, and resolvers |
+| `internal/web` | Templ pages, HTMX handlers, and shadcn-templ components |
+| `public` | Compiled CSS and scripts embedded by the server |
 | `mobile` | Expo and React Native application using gluestack UI |
 | `website` | This Docusaurus site |
 
@@ -22,7 +24,8 @@ From the repository root:
 
 ```bash
 cp .env.example .env
-go run ./cmd/server
+make web/install
+make server/dev
 ```
 
 The server listens on port 8080 by default. Set `MOBICODE_SERVER_PORT` in `.env` or your shell to change it. Server variables use the `MOBICODE_SERVER_*` prefix; mobile variables use `MOBICODE_MOBILE_*`. `GET /healthz` returns `ok`.

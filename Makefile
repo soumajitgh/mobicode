@@ -1,7 +1,8 @@
-.PHONY: help server/dev server/build server/fmt server/check gql generate mobile/install mobile/start mobile/android mobile/ios mobile/web mobile/lint mobile/typecheck website/install website/start website/build
+.PHONY: help server/dev server/build server/fmt server/check gql templ shadcn generate web/install web/build web/watch web/serve mobile/install mobile/start mobile/android mobile/ios mobile/web mobile/lint mobile/typecheck website/install website/start website/build
 
 GO ?= go
 NPM ?= npm
+WEB_PORT ?= 8080
 
 help:
 	@printf '%s\n' \
@@ -11,7 +12,13 @@ help:
 	  '  make server/fmt         Format Go source' \
 	  '  make server/check       Run go vet' \
 	  '  make gql                Generate GraphQL code' \
+	  '  make templ              Generate Go code from Templ pages' \
+	  '  make shadcn             Bundle shadcn-templ component scripts' \
 	  '  make generate           Run all code generators' \
+	  'Web app:' \
+	  '  make web/install        Install Tailwind and HTMX build tools' \
+	  '  make web/build          Generate Templ and compile web assets' \
+	  '  make web/watch          Watch Templ/Go and Tailwind (proxy on :7331)' \
 	  'Mobile:' \
 	  '  make mobile/install     Install locked dependencies' \
 	  '  make mobile/start       Start Expo' \
@@ -25,10 +32,10 @@ help:
 	  '  make website/start      Start Docusaurus' \
 	  '  make website/build      Build the static site'
 
-server/dev:
+server/dev: web/build
 	$(GO) run ./cmd/server
 
-server/build:
+server/build: web/build
 	@mkdir -p bin
 	$(GO) build -o bin/mobicode-server ./cmd/server
 
@@ -41,7 +48,28 @@ server/check:
 gql:
 	$(GO) run github.com/99designs/gqlgen generate
 
-generate: gql
+templ:
+	$(GO) tool templ generate -path internal/web
+
+shadcn:
+	$(GO) tool shadcn-templ bundle
+
+generate: gql templ shadcn
+
+web/install:
+	$(NPM) ci
+
+web/build: templ shadcn
+	$(NPM) run build
+
+web/serve:
+	MOBICODE_SERVER_DEV_ASSETS=true MOBICODE_SERVER_PORT=$(WEB_PORT) $(GO) run ./cmd/server
+
+web/watch: web/build
+	@$(NPM) run css:watch & css_pid=$$!; \
+	$(GO) tool shadcn-templ bundle --watch & scripts_pid=$$!; \
+	trap 'kill $$css_pid $$scripts_pid 2>/dev/null || true' EXIT INT TERM; \
+	$(GO) tool templ generate -path internal/web -watch -cmd="$(MAKE) -C ../.. web/serve WEB_PORT=$(WEB_PORT)" -proxy="http://localhost:$(WEB_PORT)" -open-browser=false
 
 mobile/install:
 	$(NPM) --prefix mobile ci

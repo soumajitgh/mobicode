@@ -5,3 +5,4 @@
 *.log
 /bin/
 /server
+/node_modules/

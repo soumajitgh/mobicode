@@ -1,0 +1,23 @@
+package pages
+
+import "github.com/soumajitgh/mobicode/internal/web/components"
+import "github.com/soumajitgh/mobicode/internal/web/components/button"
+
+templ Home() {
+	@Layout("MobiCode") {
+		@components.Navbar()
+		<main class="mx-auto flex min-h-[80vh] max-w-4xl flex-col justify-center gap-8 px-6 py-16">
+			<div class="space-y-4">
+				<p class="text-sm font-semibold uppercase tracking-[0.2em] text-primary">Code from anywhere</p>
+				<h1 class="text-5xl font-bold tracking-tight sm:text-6xl">MobiCode</h1>
+				<p class="max-w-xl text-lg leading-relaxed text-muted-foreground">A home for your mobile coding workspace.</p>
+			</div>
+			<div class="flex flex-wrap items-center gap-4">
+				@button.Button(button.Props{Attributes: templ.Attributes{"hx-get": "/partials/status", "hx-target": "#status", "hx-swap": "innerHTML"}}) {
+					Check server
+				}
+				<div id="status" role="status" aria-live="polite" class="text-sm text-muted-foreground"></div>
+			</div>
+		</main>
+	}
+}

@@ -10,13 +10,16 @@ import (
 	appgraphql "github.com/soumajitgh/mobicode/internal/graphql"
 	"github.com/soumajitgh/mobicode/internal/http/handler"
 	"github.com/soumajitgh/mobicode/internal/http/middleware"
+	"github.com/soumajitgh/mobicode/internal/web"
+	webhandlers "github.com/soumajitgh/mobicode/internal/web/handlers"
 )
 
 // NewRouter builds the server's HTTP handler.
-func NewRouter(resolver *appgraphql.Resolver, enablePlayground bool) *chi.Mux {
+func NewRouter(resolver *appgraphql.Resolver, webHandler *webhandlers.Handler, enablePlayground, devAssets bool) *chi.Mux {
 	r := chi.NewRouter()
 	middleware.Apply(r)
 	r.Get("/healthz", handler.Health)
+	web.RegisterRoutes(r, webHandler, devAssets)
 
 	r.Route("/mobile", func(r chi.Router) {
 		graphqlHandler := newGraphQLHandler(resolver)
