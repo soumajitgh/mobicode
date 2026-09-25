@@ -1,0 +1,21 @@
+{
+  "scripts": {
+    "dir": "public/js",
+    "path": "/assets/js"
+  },
+  "$schema": "https://shadcn-templ.com/schema/components.json",
+  "style": "base-nova",
+  "tailwind": {
+    "css": "internal/web/styles/app.css",
+    "baseColor": "neutral",
+    "cssVariables": true
+  },
+  "rtl": false,
+  "iconLibrary": "lucide",
+  "menuColor": "default",
+  "menuAccent": "subtle",
+  "aliases": {
+    "components": "github.com/soumajitgh/mobicode/internal/web/components",
+    "utils": "github.com/soumajitgh/mobicode/internal/web/utils"
+  }
+}

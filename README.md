@@ -2,12 +2,16 @@
 
 Mobile first coding agent for on the go development.
 
-This repository contains the initial framework for three components:
+This repository contains the Go server, browser app, mobile app, and documentation site:
 
 | Directory | Purpose |
 | --- | --- |
 | `cmd/server` | Go server entrypoint |
-| `internal/server` | Private server HTTP package |
+| `internal/http` | Chi router, middleware, and GraphQL transport |
+| `internal/store` | SQLite connection, Goose migrations, and GORM repositories |
+| `internal/graphql` | gqlgen schema, generated code, and resolvers |
+| `internal/web` | Templ pages, HTMX handlers, and shadcn-templ components |
+| `public` | Compiled Tailwind CSS and browser scripts embedded in the server |
 | `mobile` | Expo React Native app with gluestack UI |
 | `website` | Docusaurus documentation site |
 
@@ -15,7 +19,14 @@ This repository contains the initial framework for three components:
 
 Run `make help` to see the daily development commands. The most common are:
 
-- Server: `make server/dev` (listens on `:8080`, or `ADDR` if set; `GET /healthz` returns `ok`)
+Use Node.js 22 or newer and pnpm 11.27.1 for the root web assets, mobile app, and website.
+
+- Server: copy `.env.example` to `.env`, then run `make server/dev` (listens on `:8080` by default; set `MOBICODE_SERVER_PORT` to change the port; `GET /healthz` returns `ok`)
+- Database: SQLite uses `mobicode.db` and GORM logging defaults to `warn`. Startup runs embedded Goose migrations before serving requests. Add versioned SQL files under `internal/store/migrations` when application schemas are defined. The example repository has no table until a future migration creates one.
+- GraphQL: send POST requests to `/mobile/graphql`; the playground is disabled by default
+- Schema changes: edit `internal/graphql/schema/*.graphqls`, run `make gql`, then implement the generated resolver using services from `internal/app`
+- Browser app: run `make web/install`, then `make web/build` and `make server/dev`; open `http://localhost:8080/`
+- Browser development: run `make web/watch` and open `http://localhost:7331/` for reloads (`WEB_PORT=8090` changes the app port)
 - Mobile: `make mobile/install`, then `make mobile/start` (or `make mobile/android`, `make mobile/ios`, `make mobile/web`)
 - Website: `make website/install`, then `make website/start`
 
