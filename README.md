@@ -7,7 +7,7 @@ This repository contains the initial framework for three components:
 | Directory | Purpose |
 | --- | --- |
 | `cmd/server` | Go server entrypoint |
-| `internal/server` | Private server HTTP package |
+| `internal/http` | Chi router, middleware, and handlers |
 | `mobile` | Expo React Native app with gluestack UI |
 | `website` | Docusaurus documentation site |
 
@@ -15,7 +15,7 @@ This repository contains the initial framework for three components:
 
 Run `make help` to see the daily development commands. The most common are:
 
-- Server: `make server/dev` (listens on `:8080`, or `ADDR` if set; `GET /healthz` returns `ok`)
+- Server: copy `.env.example` to `.env`, then run `make server/dev` (listens on `:8080` by default; set `MOBICODE_SERVER_PORT` to change the port; `GET /healthz` returns `ok`)
 - Mobile: `make mobile/install`, then `make mobile/start` (or `make mobile/android`, `make mobile/ios`, `make mobile/web`)
 - Website: `make website/install`, then `make website/start`
 

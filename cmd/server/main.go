@@ -10,18 +10,24 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/soumajitgh/mobicode/internal/server"
+	"github.com/joho/godotenv"
+	apihttp "github.com/soumajitgh/mobicode/internal/http"
 )
 
 func main() {
-	addr := os.Getenv("ADDR")
-	if addr == "" {
-		addr = ":8080"
+	if err := godotenv.Load(); err != nil && !errors.Is(err, os.ErrNotExist) {
+		log.Fatalf("load .env: %v", err)
 	}
+
+	port := os.Getenv("MOBICODE_SERVER_PORT")
+	if port == "" {
+		port = "8080"
+	}
+	addr := ":" + port
 
 	httpServer := &http.Server{
 		Addr:              addr,
-		Handler:           server.NewHandler(),
+		Handler:           apihttp.NewRouter(),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 

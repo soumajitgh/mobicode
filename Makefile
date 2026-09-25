@@ -6,7 +6,7 @@ NPM ?= npm
 help:
 	@printf '%s\n' \
 	  'Server:' \
-	  '  make server/dev         Run the Go server (ADDR=:8080 by default)' \
+	  '  make server/dev         Run the Go API (MOBICODE_SERVER_PORT=8080 by default)' \
 	  '  make server/build       Build bin/mobicode-server' \
 	  '  make server/fmt         Format Go source' \
 	  '  make server/check       Run go vet' \
