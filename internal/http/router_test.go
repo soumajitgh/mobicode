@@ -11,6 +11,7 @@ import (
 	appgraphql "github.com/soumajitgh/mobicode/internal/graphql"
 	"github.com/soumajitgh/mobicode/internal/health"
 	"github.com/soumajitgh/mobicode/internal/web/handlers"
+	"go.uber.org/zap"
 )
 
 func testRouter(enablePlayground bool) http.Handler {
@@ -20,6 +21,7 @@ func testRouter(enablePlayground bool) http.Handler {
 		&handlers.Handler{HealthService: healthService},
 		enablePlayground,
 		false,
+		zap.NewNop(),
 	)
 }
 

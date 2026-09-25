@@ -12,12 +12,13 @@ import (
 	"github.com/soumajitgh/mobicode/internal/http/middleware"
 	"github.com/soumajitgh/mobicode/internal/web"
 	webhandlers "github.com/soumajitgh/mobicode/internal/web/handlers"
+	"go.uber.org/zap"
 )
 
 // NewRouter builds the server's HTTP handler.
-func NewRouter(resolver *appgraphql.Resolver, webHandler *webhandlers.Handler, enablePlayground, devAssets bool) *chi.Mux {
+func NewRouter(resolver *appgraphql.Resolver, webHandler *webhandlers.Handler, enablePlayground, devAssets bool, log *zap.Logger) *chi.Mux {
 	r := chi.NewRouter()
-	middleware.Apply(r)
+	middleware.Apply(r, log)
 	r.Get("/healthz", handler.Health)
 	web.RegisterRoutes(r, webHandler, devAssets)
 
