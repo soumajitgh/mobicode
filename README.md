@@ -19,9 +19,11 @@ This repository contains the Go server, browser app, mobile app, and documentati
 
 Run `make help` to see the daily development commands. The most common are:
 
+Use Node.js 22 or newer and pnpm 11.27.1 for the root web assets, mobile app, and website.
+
 - Server: copy `.env.example` to `.env`, then run `make server/dev` (listens on `:8080` by default; set `MOBICODE_SERVER_PORT` to change the port; `GET /healthz` returns `ok`)
-- Database: set `MOBICODE_SERVER_DB_PATH` for the SQLite file (default `mobicode.db`) and `MOBICODE_SERVER_DB_LOG_LEVEL` to `silent`, `error`, `warn` (default), or `info`. Startup runs embedded Goose migrations before serving requests. Add versioned SQL files under `internal/store/migrations` when application schemas are defined. The example repository has no table until a future migration creates one.
-- GraphQL: send POST requests to `/mobile/graphql`; set `MOBICODE_SERVER_PLAYGROUND=true` to enable `/mobile/graphql/playground` for localhost clients
+- Database: SQLite uses `mobicode.db` and GORM logging defaults to `warn`. Startup runs embedded Goose migrations before serving requests. Add versioned SQL files under `internal/store/migrations` when application schemas are defined. The example repository has no table until a future migration creates one.
+- GraphQL: send POST requests to `/mobile/graphql`; the playground is disabled by default
 - Schema changes: edit `internal/graphql/schema/*.graphqls`, run `make gql`, then implement the generated resolver using services from `internal/app`
 - Browser app: run `make web/install`, then `make web/build` and `make server/dev`; open `http://localhost:8080/`
 - Browser development: run `make web/watch` and open `http://localhost:7331/` for reloads (`WEB_PORT=8090` changes the app port)

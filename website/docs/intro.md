@@ -42,8 +42,8 @@ Set `MOBICODE_SERVER_PLAYGROUND=true` to enable the playground at `/mobile/graph
 
 ```bash
 cd mobile
-npm install
-npm start
+pnpm install
+pnpm start
 ```
 
 Follow the Expo CLI instructions to open the app on a device or simulator.
@@ -52,8 +52,8 @@ Follow the Expo CLI instructions to open the app on a device or simulator.
 
 ```bash
 cd website
-npm install
-npm start
+pnpm install
+pnpm start
 ```
 
 The site deploys to GitHub Pages when `master` changes.

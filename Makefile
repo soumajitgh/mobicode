@@ -1,7 +1,7 @@
 .PHONY: help server/dev server/build server/fmt server/check gql templ shadcn generate web/install web/build web/watch web/serve mobile/install mobile/start mobile/android mobile/ios mobile/web mobile/lint mobile/typecheck website/install website/start website/build
 
 GO ?= go
-NPM ?= npm
+PNPM ?= pnpm
 WEB_PORT ?= 8080
 
 help:
@@ -57,46 +57,46 @@ shadcn:
 generate: gql templ shadcn
 
 web/install:
-	$(NPM) ci
+	$(PNPM) install --frozen-lockfile
 
 web/build: templ shadcn
-	$(NPM) run build
+	$(PNPM) run build
 
 web/serve:
 	MOBICODE_SERVER_DEV_ASSETS=true MOBICODE_SERVER_PORT=$(WEB_PORT) $(GO) run ./cmd/server
 
 web/watch: web/build
-	@$(NPM) run css:watch & css_pid=$$!; \
+	@$(PNPM) run css:watch & css_pid=$$!; \
 	$(GO) tool shadcn-templ bundle --watch & scripts_pid=$$!; \
 	trap 'kill $$css_pid $$scripts_pid 2>/dev/null || true' EXIT INT TERM; \
 	$(GO) tool templ generate -path internal/web -watch -cmd="$(MAKE) -C ../.. web/serve WEB_PORT=$(WEB_PORT)" -proxy="http://localhost:$(WEB_PORT)" -open-browser=false
 
 mobile/install:
-	$(NPM) --prefix mobile ci
+	cd mobile && $(PNPM) install --frozen-lockfile
 
 mobile/start:
-	$(NPM) --prefix mobile start
+	cd mobile && $(PNPM) start
 
 mobile/android:
-	$(NPM) --prefix mobile run android
+	cd mobile && $(PNPM) run android
 
 mobile/ios:
-	$(NPM) --prefix mobile run ios
+	cd mobile && $(PNPM) run ios
 
 mobile/web:
-	$(NPM) --prefix mobile run web
+	cd mobile && $(PNPM) run web
 
 mobile/lint:
-	cd mobile && npx expo lint
+	cd mobile && $(PNPM) exec expo lint
 
 mobile/typecheck:
-	cd mobile && npx tsc --noEmit
+	cd mobile && $(PNPM) exec tsc --noEmit
 
 website/install:
-	$(NPM) --prefix website ci
+	cd website && $(PNPM) install --frozen-lockfile
 
 website/start:
-	$(NPM) --prefix website start
+	cd website && $(PNPM) start
 
 website/build:
-	$(NPM) --prefix website run build
+	cd website && $(PNPM) run build
