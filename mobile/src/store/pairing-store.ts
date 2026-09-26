@@ -17,7 +17,7 @@ export const usePairingStore = create<PairingStore>((set, get) => ({
   busy: false,
   error: null,
 
-  setPayload: (payload) => set({ payload }),
+  setPayload: (payload) => set({ payload, error: null }),
 
   submit: async () => {
     if (get().busy) return;
@@ -31,7 +31,7 @@ export const usePairingStore = create<PairingStore>((set, get) => ({
         error:
           error instanceof AppError
             ? error.message
-            : 'Could not complete pairing. Try again.',
+            : 'could not complete pairing. try again.',
       });
     } finally {
       set({ busy: false });

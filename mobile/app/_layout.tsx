@@ -7,6 +7,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useSessionStore } from '@/store/session-store';
 import { Screen } from '@/shared/components/ui/Screen';
 import { GluestackUIProvider } from '@/shared/components/ui/gluestack-ui-provider';
+import { theme } from '@/shared/theme';
 import '../global.css';
 
 function Navigation() {
@@ -14,7 +15,10 @@ function Navigation() {
   if (status === 'loading') {
     return (
       <Screen>
-        <ActivityIndicator accessibilityLabel="Restoring session" />
+        <ActivityIndicator
+          accessibilityLabel="restoring session"
+          color={theme.colors.primary}
+        />
       </Screen>
     );
   }
@@ -40,9 +44,9 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <GluestackUIProvider mode="light">
+      <GluestackUIProvider mode="dark">
         <Navigation />
-        <StatusBar style="auto" />
+        <StatusBar style="light" />
       </GluestackUIProvider>
     </SafeAreaProvider>
   );

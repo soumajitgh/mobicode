@@ -38,7 +38,7 @@ export function parsePairingPayload(value: string) {
   } catch {
     throw new AppError(
       'invalid_pairing_payload',
-      'Enter a valid Mobicode pairing link.',
+      'invalid mobicode pairing code.',
     );
   }
 }

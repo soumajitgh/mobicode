@@ -1,5 +1,4 @@
 import * as SecureStore from 'expo-secure-store';
-import { Platform } from 'react-native';
 import { z } from 'zod';
 
 const sessionKey = 'mobicode.mobile.session';
@@ -13,7 +12,6 @@ const savedSessionSchema = z.object({
 export type SavedSession = z.infer<typeof savedSessionSchema>;
 
 export async function loadSavedSession(): Promise<SavedSession | null> {
-  if (Platform.OS === 'web') return null;
   // The previous token-only format cannot identify its paired server.
   await SecureStore.deleteItemAsync(legacyTokenKey);
   const raw = await SecureStore.getItemAsync(sessionKey);
@@ -27,8 +25,6 @@ export async function loadSavedSession(): Promise<SavedSession | null> {
 }
 
 export async function persistSession(session: SavedSession): Promise<void> {
-  if (Platform.OS === 'web')
-    throw new Error('Secure mobile storage is unavailable on web');
   await SecureStore.setItemAsync(
     sessionKey,
     JSON.stringify(savedSessionSchema.parse(session)),
@@ -36,8 +32,6 @@ export async function persistSession(session: SavedSession): Promise<void> {
 }
 
 export async function removeSavedSession(): Promise<void> {
-  if (Platform.OS !== 'web') {
-    await SecureStore.deleteItemAsync(sessionKey);
-    await SecureStore.deleteItemAsync(legacyTokenKey);
-  }
+  await SecureStore.deleteItemAsync(sessionKey);
+  await SecureStore.deleteItemAsync(legacyTokenKey);
 }
