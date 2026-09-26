@@ -24,7 +24,7 @@ Use Go 1.26.5, Node.js 22 or newer, and pnpm 11.27.1. From a fresh clone, run `m
 Run `make help` to see the daily development commands. The most common are:
 
 - Server: run `make server/dev` after initialization. Air rebuilds on Go and Templ changes, Tailwind watches CSS, and the browser reloads through `http://localhost:7331/`. The API also listens directly on `:8080` (`GET /healthz` returns `ok`). Set `SERVER_PORT` and `RELOAD_PORT` on the make command to use other local ports.
-- Database: set `MOBICODE_SERVER_DB_PATH` in `.env` to choose the SQLite file (default `db/mobicode.db`). GORM logging defaults to `warn`. Startup runs embedded Goose migrations before serving requests.
+- Database: set `MOBICODE_SERVER_DB_PATH` in `.env` to choose the SQLite file (default `tmp/database/mobicode.db`). GORM logging defaults to `warn`. Startup runs embedded Goose migrations before serving requests.
 - GraphQL: send POST requests to `/mobile/graphql`; the playground is disabled by default
 - Schema changes: edit `internal/graphql/schema/*.graphqls`, run `go tool gqlgen generate`, then implement the generated resolver using services from `internal/app`
 - Browser app: run `make server/dev` after initialization; open `http://localhost:8080/`
@@ -42,7 +42,7 @@ Install [golangci-lint v2](https://golangci-lint.run/docs/welcome/install/local/
 
 `compose.yaml` is a development setup. It mounts the source tree, uses Air to rebuild the server when Go or Templ files change, and watches Tailwind CSS. Run `docker compose up --build` to start it. The reload proxy is available at `http://localhost:7331/` (or `MOBICODE_RELOAD_PORT`), and the server is available directly at `http://localhost:8080/` (or `MOBICODE_SERVER_PORT`).
 
-SQLite needs no separate service. Set `MOBICODE_SERVER_DB_PATH` in `.env` (default `db/mobicode.db`); the `db` directory is backed by a named Compose volume so data persists across restarts. For local `make server/dev`, the same path is created in the repository and ignored by Git. Browser registration and password reset require the administrator token from `.env`; `make init` generates one when creating the file.
+SQLite needs no separate service. Set `MOBICODE_SERVER_DB_PATH` in `.env` (default `tmp/database/mobicode.db`); the `tmp/database` directory is backed by a named Compose volume so data persists across restarts. For local `make server/dev`, the same path is created in the repository and ignored by Git. Browser registration and password reset require the administrator token from `.env`; `make init` generates one when creating the file.
 
 The documentation site is published from `master` through GitHub Actions at [soumajitgh.github.io/mobicode](https://soumajitgh.github.io/mobicode/).
 

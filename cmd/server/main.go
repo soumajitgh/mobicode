@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -54,7 +55,7 @@ func run(log *zap.Logger) error {
 	}
 	path := os.Getenv("MOBICODE_SERVER_DB_PATH")
 	if path == "" {
-		path = "mobicode.db"
+		path = filepath.Join("tmp", "database", "mobicode.db")
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
