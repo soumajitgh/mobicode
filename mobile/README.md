@@ -1,15 +1,11 @@
 # Mobicode mobile
 
-The app uses the bundle and package identifier `com.soumajitgh.mobicode` on iOS and Android.
+The Expo app uses `app/` for routes, `src/features/` for product features, `src/shared/` for reusable UI and configuration, `src/api/` for GraphQL operations and transport, and `src/store/` for Zustand stores. `(auth)` contains pairing; `(app)` contains the authenticated shell. The root layout restores the session and protects both route groups.
 
-Copy `.env.example` to `.env` and set `EXPO_PUBLIC_MOBICODE_SERVER_URL` to the server address reachable by the phone or simulator. Expo embeds this public value in the app bundle; it is not a secret. On the server, enable `MOBICODE_MOBILE_AUTO_PAIR=true` only for trusted local development.
+The server's `createDevicePairing` mutation produces a `mobicode://pair?server=…&token=…` QR payload. Paste that link into the pairing screen to claim a mobile session. The app validates the payload, calls `claimDevicePairing` at the supplied server, and stores the server URL and access token in Expo SecureStore. On startup it checks `viewer` before entering `(app)`. The GraphQL endpoint is `{serverBaseURL}/mobile/graphql`; it is runtime session state, not a build environment variable. Older token-only sessions must pair again because they did not store their server address. Pairing on web is unavailable because SecureStore is native only.
 
-## API clients
+GraphQL operations live with their feature or under `src/api/graphql/`. `codegen.ts` reads the Go server schema and generates typed documents in `src/api/graphql/generated/`. Run `pnpm run graphql:generate` after schema or operation changes. Zustand owns app state; session credentials are persisted in Expo SecureStore.
 
-- `src/lib/api.ts` provides an Axios client for REST endpoints such as development auto pairing.
-- `src/lib/apollo.ts` provides the Apollo GraphQL client with an authorization link and normalized cache. GraphQL operations live in `src/graphql/*.graphql`.
-- `codegen.ts` generates typed GraphQL documents from the Go server schema. Run `pnpm run graphql:generate` after changing GraphQL operations or the schema.
-- TanStack Query owns non-GraphQL asynchronous state, including session bootstrap. Apollo owns GraphQL query state. Both providers are mounted in `App.tsx`.
-- Zod validates responses that cross the REST boundary. The mobile access token is stored in Expo SecureStore.
+Gluestack UI v5 is initialized with NativeWind v5. The CLI-generated provider and all 58 available components live in `src/shared/components/ui/`; use `pnpm dlx gluestack-ui@latest add <component> --use-pnpm` for updates. The generated v5 alpha templates currently contain strict TypeScript and lint errors, so app checks exclude that generated directory. Imported components are still checked and bundled with the app.
 
-Run `pnpm exec expo lint` and `pnpm exec tsc --noEmit` before submitting mobile changes. After adding a native module, rebuild the development app with `pnpm exec expo run:ios` or `pnpm exec expo run:android`.
+Run `pnpm run typecheck`, `pnpm run lint`, and `pnpm run format:check` before submitting changes. After adding a native dependency, rebuild the development app.

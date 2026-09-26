@@ -2,9 +2,9 @@ import type { CodegenConfig } from '@graphql-codegen/cli';
 
 const config: CodegenConfig = {
   schema: '../internal/graphql/schema/*.graphqls',
-  documents: 'src/graphql/*.graphql',
+  documents: ['src/api/**/*.graphql', 'src/features/**/*.graphql'],
   generates: {
-    'src/graphql/generated/': {
+    'src/api/graphql/generated/': {
       preset: 'client',
       presetConfig: { fragmentMasking: false },
     },

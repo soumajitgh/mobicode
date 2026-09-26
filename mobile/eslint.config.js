@@ -2,6 +2,6 @@ const { defineConfig, globalIgnores } = require('eslint/config');
 const expoConfig = require('eslint-config-expo/flat');
 
 module.exports = defineConfig([
-  globalIgnores(['dist/*', 'src/graphql/generated/*']),
+  globalIgnores(['dist/*', 'src/api/graphql/generated/*', 'src/shared/components/ui/**']),
   expoConfig,
 ]);

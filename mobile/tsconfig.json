@@ -3,9 +3,8 @@
   "compilerOptions": {
     "strict": true,
     "paths": {
-      "@/*": [
-        "./*"
-      ]
+      "@/*": ["./src/*"]
     }
-  }
+  },
+  "exclude": ["src/shared/components/ui/**"]
 }
