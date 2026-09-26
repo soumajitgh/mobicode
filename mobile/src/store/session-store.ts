@@ -7,6 +7,7 @@ import {
   restoreSession,
   type Session,
 } from '@/features/auth/session';
+import { autoPairDevelopmentDevice } from '@/features/pairing/api/auto-pair';
 
 type SessionStatus = 'loading' | 'unauthenticated' | 'authenticated';
 
@@ -33,12 +34,18 @@ export const useSessionStore = create<SessionStore>((set) => ({
       set({ status: 'loading', error: null, session: null });
       try {
         const session = await restoreSession();
+        const bootSession = session ?? (await autoPairDevelopmentDevice());
         set(
-          session
-            ? { status: 'authenticated', error: null, session }
+          bootSession
+            ? { status: 'authenticated', error: null, session: bootSession }
             : { status: 'unauthenticated', error: null, session: null },
         );
       } catch (error) {
+        const session = await autoPairDevelopmentDevice();
+        if (session) {
+          set({ status: 'authenticated', error: null, session });
+          return;
+        }
         set({
           status: 'unauthenticated',
           error:

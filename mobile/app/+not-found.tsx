@@ -1,7 +1,7 @@
 import { Link } from 'expo-router';
 import { StyleSheet, Text } from 'react-native';
 
-import { Screen } from '@/shared/components/ui/Screen';
+import { Screen } from '@/components/ui/Screen';
 import { theme } from '@/shared/theme';
 
 export default function NotFound() {

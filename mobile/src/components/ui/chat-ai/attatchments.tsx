@@ -8,10 +8,10 @@ import React, {
 } from 'react';
 import { Platform } from 'react-native';
 import { ScrollView } from 'react-native';
-import { Box } from '@/shared/components/ui/box';
-import { Button } from '@/shared/components/ui/button';
-import { Image } from '@/shared/components/ui/image';
-import { Tooltip, TooltipContent, TooltipText } from '@/shared/components/ui/tooltip';
+import { Box } from '@/components/ui/box';
+import { Button } from '@/components/ui/button';
+import { Image } from '@/components/ui/image';
+import { Tooltip, TooltipContent, TooltipText } from '@/components/ui/tooltip';
 import type { FileUIPart, SourceDocumentUIPart } from 'ai';
 import {
   FileText,

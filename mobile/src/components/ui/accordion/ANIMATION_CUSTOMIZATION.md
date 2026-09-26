@@ -16,7 +16,7 @@ All animation configurations are located in `animation-config.ts`. Simply modify
 ### Available Options
 
 ```typescript
-// src/shared/components/ui/accordion/animation-config.ts
+// src/components/ui/accordion/animation-config.ts
 
 export const accordionAnimationConfig = {
   /**

@@ -12,7 +12,7 @@ import {
   ModalHeader,
   ModalCloseButton,
   ModalBody,
-} from '@/shared/components/ui/modal';
+} from '@/components/ui/modal';
 import { X } from 'lucide-react-native';
 import { Pressable, Text, View, TextInput, ScrollView } from 'react-native';
 

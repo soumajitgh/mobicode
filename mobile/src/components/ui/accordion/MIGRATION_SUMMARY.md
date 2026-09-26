@@ -30,7 +30,7 @@ Successfully migrated the Accordion component from the **old Animated API** to *
 
 ### **New Files Created:**
 ```
-src/shared/components/ui/accordion/
+src/components/ui/accordion/
 ├── AnimatedHeight.tsx           ✨ NEW - Reanimated height animation
 ├── AnimatedIcon.tsx            ✨ NEW - Reanimated icon rotation
 ├── animation-config.ts         ✨ NEW - User-customizable config
@@ -41,7 +41,7 @@ src/shared/components/ui/accordion/
 
 ### **Modified Files:**
 ```
-src/shared/components/ui/accordion/
+src/components/ui/accordion/
 └── index.tsx                   🔄 UPDATED - Uses new animated components
 
 packages/gluestack-core/src/accordion/creator/

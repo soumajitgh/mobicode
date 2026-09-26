@@ -5,8 +5,8 @@ import { useEffect } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { useSessionStore } from '@/store/session-store';
-import { Screen } from '@/shared/components/ui/Screen';
-import { GluestackUIProvider } from '@/shared/components/ui/gluestack-ui-provider';
+import { Screen } from '@/components/ui/Screen';
+import { GluestackUIProvider } from '@/components/ui/gluestack-ui-provider';
 import { theme } from '@/shared/theme';
 import '../global.css';
 
@@ -28,7 +28,7 @@ function Navigation() {
         <Stack.Screen name="(auth)" />
       </Stack.Protected>
       <Stack.Protected guard={status === 'authenticated'}>
-        <Stack.Screen name="(app)" />
+        <Stack.Screen name="(tabs)" />
       </Stack.Protected>
       <Stack.Screen name="+not-found" />
     </Stack>
