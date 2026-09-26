@@ -77,13 +77,13 @@ func TestBrowserAuth(t *testing.T) {
 		}
 		closeBody(res)
 	}
-	res := post("/onboarding", url.Values{"email": {"a@example.com"}, "password": {"123456789012"}})
+	res := post("/onboarding", url.Values{"email": {"a@example.com"}, "password": {"123456789012"}, "confirm_password": {"123456789012"}})
 	if res.StatusCode != 403 {
 		t.Fatalf("CSRF: %d", res.StatusCode)
 	}
 	closeBody(res)
 	csrf := token("/onboarding")
-	res = post("/onboarding", url.Values{"email": {" A@Example.com "}, "password": {"123456789012"}, "csrf_token": {csrf}})
+	res = post("/onboarding", url.Values{"email": {" A@Example.com "}, "password": {"123456789012"}, "confirm_password": {"123456789012"}, "csrf_token": {csrf}})
 	if res.StatusCode != 303 || res.Header.Get("Location") != "/onboarding?step=2" {
 		t.Fatalf("onboarding user: %d %s", res.StatusCode, res.Header.Get("Location"))
 	}

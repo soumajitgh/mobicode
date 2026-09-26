@@ -7,6 +7,7 @@ require (
 	github.com/Oudwins/tailwind-merge-go v0.2.2
 	github.com/a-h/templ v0.3.1020
 	github.com/alexedwards/scs/v2 v2.9.0
+	github.com/boomhut/zxcvbn-go v0.0.0-20240810164553-9d2932de37d8
 	github.com/go-chi/chi/v5 v5.3.2
 	github.com/joho/godotenv v1.5.1
 	github.com/pressly/goose/v3 v3.28.0

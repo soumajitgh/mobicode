@@ -143,7 +143,7 @@ func TestOnboardingFlow(t *testing.T) {
 
 	// Invalid input: short password (< 12 characters)
 	csrf = token("/onboarding")
-	res = post("/onboarding", url.Values{"email": {"owner@example.com"}, "password": {"short"}, "csrf_token": {csrf}})
+	res = post("/onboarding", url.Values{"email": {"owner@example.com"}, "password": {"short"}, "confirm_password": {"short"}, "csrf_token": {csrf}})
 	body = readBody(res)
 	if res.StatusCode != http.StatusUnprocessableEntity {
 		t.Fatalf("expected 422 for short password, got %d", res.StatusCode)
@@ -154,7 +154,7 @@ func TestOnboardingFlow(t *testing.T) {
 
 	// Invalid input: invalid email format
 	csrf = token("/onboarding")
-	res = post("/onboarding", url.Values{"email": {"not-an-email"}, "password": {"validpassword123"}, "csrf_token": {csrf}})
+	res = post("/onboarding", url.Values{"email": {"not-an-email"}, "password": {"validpassword123"}, "confirm_password": {"validpassword123"}, "csrf_token": {csrf}})
 	body = readBody(res)
 	if res.StatusCode != http.StatusUnprocessableEntity {
 		t.Fatalf("expected 422 for invalid email, got %d", res.StatusCode)
@@ -165,7 +165,7 @@ func TestOnboardingFlow(t *testing.T) {
 
 	// 4. Successful User Creation
 	csrf = token("/onboarding")
-	res = post("/onboarding", url.Values{"email": {" Owner@Example.com "}, "password": {"validpassword123"}, "csrf_token": {csrf}})
+	res = post("/onboarding", url.Values{"email": {" Owner@Example.com "}, "password": {"validpassword123"}, "confirm_password": {"validpassword123"}, "csrf_token": {csrf}})
 	if res.StatusCode != http.StatusSeeOther || res.Header.Get("Location") != "/onboarding?step=2" {
 		t.Fatalf("expected redirect to /onboarding?step=2, got %d %s", res.StatusCode, res.Header.Get("Location"))
 	}
@@ -204,7 +204,7 @@ func TestOnboardingFlow(t *testing.T) {
 
 	// Submitting user creation again must not duplicate user
 	csrf = token("/onboarding?step=3")
-	res = post("/onboarding", url.Values{"email": {"duplicate@example.com"}, "password": {"validpassword123"}, "csrf_token": {csrf}})
+	res = post("/onboarding", url.Values{"email": {"duplicate@example.com"}, "password": {"validpassword123"}, "confirm_password": {"validpassword123"}, "csrf_token": {csrf}})
 	if res.StatusCode != http.StatusSeeOther || res.Header.Get("Location") != "/onboarding?step=2" {
 		t.Fatalf("expected redirect to step 2 on repeated post, got %d %s", res.StatusCode, res.Header.Get("Location"))
 	}

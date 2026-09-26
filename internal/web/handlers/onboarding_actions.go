@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/a-h/templ"
+	zxcvbn "github.com/boomhut/zxcvbn-go"
 
 	"github.com/soumajitgh/mobicode/internal/auth"
 	"github.com/soumajitgh/mobicode/internal/utils"
@@ -87,6 +88,10 @@ func (o *Onboarding) SubmitUser(w http.ResponseWriter, r *http.Request) {
 
 	email := r.PostFormValue("email")
 	password := r.PostFormValue("password")
+	if password != r.PostFormValue("confirm_password") {
+		o.renderUserForm(w, r, email, "Passwords do not match")
+		return
+	}
 
 	user, err := o.Auth.Service.CreateInitialUser(r.Context(), email, password)
 	if err != nil {
@@ -103,17 +108,7 @@ func (o *Onboarding) SubmitUser(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.WriteHeader(http.StatusUnprocessableEntity)
-		props := pages.OnboardingProps{
-			Step:         1,
-			UserCreated:  false,
-			UserEmail:    "",
-			CSRFToken:    o.Auth.csrf(r.Context()),
-			ErrorMessage: message,
-			EmailValue:   email,
-		}
-		templ.Handler(pages.Onboarding(props)).ServeHTTP(w, r)
+		o.renderUserForm(w, r, email, message)
 		return
 	}
 
@@ -127,6 +122,38 @@ func (o *Onboarding) SubmitUser(w http.ResponseWriter, r *http.Request) {
 	o.Sessions.Put(r.Context(), "onboarding_in_progress", true)
 
 	http.Redirect(w, r, "/onboarding?step=2", http.StatusSeeOther)
+}
+
+func (o *Onboarding) renderUserForm(w http.ResponseWriter, r *http.Request, email, message string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusUnprocessableEntity)
+	templ.Handler(pages.Onboarding(pages.OnboardingProps{
+		Step:         1,
+		CSRFToken:    o.Auth.csrf(r.Context()),
+		ErrorMessage: message,
+		EmailValue:   email,
+	})).ServeHTTP(w, r)
+}
+
+func (o *Onboarding) PasswordStrength(w http.ResponseWriter, r *http.Request) {
+	if !o.Auth.checkCSRF(r) {
+		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		return
+	}
+
+	password := r.PostFormValue("password")
+	if len(password) > 128 {
+		http.Error(w, "password too long", http.StatusBadRequest)
+		return
+	}
+
+	score := 0
+	if password != "" {
+		email := utils.NormalizeEmail(r.PostFormValue("email"))
+		score = zxcvbn.PasswordStrength(password, []string{email, "MobiCode"}).Score
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	templ.Handler(pages.PasswordStrength(password, score)).ServeHTTP(w, r)
 }
 
 func (o *Onboarding) SubmitFinish(w http.ResponseWriter, r *http.Request) {
