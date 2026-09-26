@@ -14,18 +14,3 @@ func TestSafeRedirects(t *testing.T) {
 		}
 	}
 }
-
-func TestEndpointRateLimit(t *testing.T) {
-	limiter := &rateLimiter{entries: make(map[string]*rateEntry)}
-	for range 10 {
-		if !limiter.Allow("login:127.0.0.1") {
-			t.Fatal("blocked early")
-		}
-	}
-	if limiter.Allow("login:127.0.0.1") {
-		t.Fatal("allowed eleventh request")
-	}
-	if !limiter.Allow("register:127.0.0.1") {
-		t.Fatal("another endpoint was limited")
-	}
-}

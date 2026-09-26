@@ -142,6 +142,25 @@ func TestWebRoutes(t *testing.T) {
 	}
 }
 
+func TestAuthRoutesAreRateLimitedSeparately(t *testing.T) {
+	router := testRouter(t, false)
+	for _, path := range []string{"/auth/login", "/auth/register", "/auth/reset-password"} {
+		for attempt := 1; attempt <= 11; attempt++ {
+			request := httptest.NewRequest(http.MethodPost, path, nil)
+			request.RemoteAddr = "192.0.2.1:1234"
+			recorder := httptest.NewRecorder()
+			router.ServeHTTP(recorder, request)
+			want := http.StatusForbidden // Missing CSRF token, if the request reaches auth.
+			if attempt == 11 {
+				want = http.StatusTooManyRequests
+			}
+			if recorder.Code != want {
+				t.Fatalf("%s attempt %d: status = %d, want %d", path, attempt, recorder.Code, want)
+			}
+		}
+	}
+}
+
 func TestPlaygroundLocalOnly(t *testing.T) {
 	for _, test := range []struct {
 		name       string

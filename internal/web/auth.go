@@ -17,11 +17,10 @@ type Auth struct {
 	Service  *auth.Service
 	Sessions *scs.SessionManager
 	Users    repository.UserRepository
-	limiter  *rateLimiter
 }
 
 func NewAuth(service *auth.Service, sessions *scs.SessionManager, users repository.UserRepository) *Auth {
-	return &Auth{Service: service, Sessions: sessions, Users: users, limiter: &rateLimiter{entries: make(map[string]*rateEntry)}}
+	return &Auth{Service: service, Sessions: sessions, Users: users}
 }
 
 func (a *Auth) csrf(ctx context.Context) string {
