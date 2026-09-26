@@ -4,8 +4,12 @@
 !.env.example
 *.log
 /bin/
+/tmp/
 /server
 *.db
 *.db-shm
 *.db-wal
 /node_modules/
+
+/db/
+/.pnpm-store/

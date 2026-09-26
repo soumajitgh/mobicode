@@ -2,19 +2,40 @@ package http
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/alexedwards/scs/v2"
+	"gorm.io/gorm/logger"
+
+	"github.com/soumajitgh/mobicode/internal/auth"
+	"github.com/soumajitgh/mobicode/internal/store"
+	"github.com/soumajitgh/mobicode/internal/store/model"
+
+	"go.uber.org/zap"
 
 	appgraphql "github.com/soumajitgh/mobicode/internal/graphql"
 	"github.com/soumajitgh/mobicode/internal/health"
 	"github.com/soumajitgh/mobicode/internal/web/handlers"
-	"go.uber.org/zap"
 )
 
-func testRouter(enablePlayground bool) http.Handler {
+func testRouter(t *testing.T, enablePlayground bool) http.Handler {
+	t.Helper()
+	persistence, err := store.Open(context.Background(), store.Config{SQLitePath: filepath.Join(t.TempDir(), "router.db"), GORMLogLevel: logger.Silent})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = persistence.Close() })
+	_ = persistence.Users.Create(context.Background(), &model.User{Email: "test@example.com", PasswordHash: "hash123456789", SessionVersion: 1})
+	sessions := scs.New()
+	sessions.Store = persistence.Sessions
+	browserAuth := handlers.NewAuth(&auth.Service{Users: persistence.Users, RecoveryToken: "a-long-recovery-token-of-at-least-32-bytes"}, sessions, persistence.Users)
+	onboarding := handlers.NewOnboarding(browserAuth, persistence.Users, sessions)
 	healthService := &health.Service{}
 	return NewRouter(
 		&appgraphql.Resolver{HealthService: healthService},
@@ -22,6 +43,8 @@ func testRouter(enablePlayground bool) http.Handler {
 		enablePlayground,
 		false,
 		zap.NewNop(),
+		browserAuth,
+		onboarding,
 	)
 }
 
@@ -29,7 +52,7 @@ func TestHealthRoute(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 
-	testRouter(false).ServeHTTP(recorder, request)
+	testRouter(t, false).ServeHTTP(recorder, request)
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
@@ -44,7 +67,7 @@ func TestGraphQLHealth(t *testing.T) {
 	request.Header.Set("Content-Type", "application/json")
 	recorder := httptest.NewRecorder()
 
-	testRouter(false).ServeHTTP(recorder, request)
+	testRouter(t, false).ServeHTTP(recorder, request)
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body = %s", recorder.Code, http.StatusOK, recorder.Body.String())
@@ -76,7 +99,7 @@ func TestGraphQLTransports(t *testing.T) {
 		t.Run(test.method, func(t *testing.T) {
 			request := httptest.NewRequest(test.method, "/mobile/graphql", nil)
 			recorder := httptest.NewRecorder()
-			testRouter(false).ServeHTTP(recorder, request)
+			testRouter(t, false).ServeHTTP(recorder, request)
 			if recorder.Code != test.wantStatus {
 				t.Fatalf("status = %d, want %d; body = %s", recorder.Code, test.wantStatus, recorder.Body.String())
 			}
@@ -90,17 +113,27 @@ func TestWebRoutes(t *testing.T) {
 		contentType string
 		contains    string
 	}{
-		{path: "/", contentType: "text/html", contains: "hx-get=\"/partials/status\""},
-		{path: "/partials/status", contentType: "text/html", contains: "Server status: ok"},
+		{path: "/", contentType: "", contains: ""},
+		{path: "/partials/status", contentType: "", contains: ""},
 		{path: "/assets/css/app.css", contentType: "text/css", contains: ".bg-background"},
 		{path: "/assets/js/htmx.min.js", contentType: "text/javascript", contains: "htmx"},
 	} {
 		t.Run(test.path, func(t *testing.T) {
 			request := httptest.NewRequest(http.MethodGet, test.path, nil)
 			recorder := httptest.NewRecorder()
-			testRouter(false).ServeHTTP(recorder, request)
-			if recorder.Code != http.StatusOK {
-				t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
+			testRouter(t, false).ServeHTTP(recorder, request)
+			want := http.StatusOK
+			if test.contentType == "" {
+				want = http.StatusSeeOther
+			}
+			if recorder.Code != want {
+				t.Fatalf("status = %d, want %d", recorder.Code, want)
+			}
+			if want == http.StatusSeeOther {
+				if !strings.HasPrefix(recorder.Header().Get("Location"), "/auth/login?next=") {
+					t.Fatal("missing login redirect")
+				}
+				return
 			}
 			if !strings.HasPrefix(recorder.Header().Get("Content-Type"), test.contentType) {
 				t.Fatalf("content type = %q, want prefix %q", recorder.Header().Get("Content-Type"), test.contentType)
@@ -109,6 +142,25 @@ func TestWebRoutes(t *testing.T) {
 				t.Fatalf("response for %s is missing %q", test.path, test.contains)
 			}
 		})
+	}
+}
+
+func TestAuthRoutesAreRateLimitedSeparately(t *testing.T) {
+	router := testRouter(t, false)
+	for _, path := range []string{"/auth/login", "/auth/register", "/auth/reset-password"} {
+		for attempt := 1; attempt <= 11; attempt++ {
+			request := httptest.NewRequest(http.MethodPost, path, nil)
+			request.RemoteAddr = "192.0.2.1:1234"
+			recorder := httptest.NewRecorder()
+			router.ServeHTTP(recorder, request)
+			want := http.StatusForbidden // Missing CSRF token, if the request reaches auth.
+			if attempt == 11 {
+				want = http.StatusTooManyRequests
+			}
+			if recorder.Code != want {
+				t.Fatalf("%s attempt %d: status = %d, want %d", path, attempt, recorder.Code, want)
+			}
+		}
 	}
 }
 
@@ -133,7 +185,7 @@ func TestPlaygroundLocalOnly(t *testing.T) {
 			}
 			request.RemoteAddr = test.remoteAddr
 			recorder := httptest.NewRecorder()
-			testRouter(test.enabled).ServeHTTP(recorder, request)
+			testRouter(t, test.enabled).ServeHTTP(recorder, request)
 			if recorder.Code != test.wantStatus {
 				t.Fatalf("status = %d, want %d", recorder.Code, test.wantStatus)
 			}

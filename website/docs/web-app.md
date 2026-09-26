@@ -11,20 +11,20 @@ The browser app uses Go, Templ, HTMX, Tailwind CSS, and shadcn-templ. It runs on
 From the repository root:
 
 ```bash
-make web/install
-make web/build
+pnpm install --frozen-lockfile
+make server/build
 make server/dev
 ```
 
-Open `http://localhost:8080/`. The home page's **Check server** button requests `/partials/status` through HTMX. The endpoint returns a Templ fragment using the same health service as GraphQL.
+Open `http://localhost:7331/` for automatic browser reloads, or `http://localhost:8080/` for the direct server. The home page's **Check server** button requests `/partials/status` through HTMX. The endpoint returns a Templ fragment using the same health service as GraphQL.
 
-For development with Templ reload and Tailwind watching:
+For development with Go, Templ, and Tailwind reload:
 
 ```bash
-make web/watch
+make server/dev
 ```
 
-Open the reload proxy at `http://localhost:7331/`. Set `WEB_PORT=8090` on the make command to choose another app port. The CSS watcher serves files from disk during development; normal runs embed the compiled assets in the Go binary.
+Air provides the reload proxy at `http://localhost:7331/`. Set `SERVER_PORT` and `RELOAD_PORT` on the make command to use other local ports. The CSS watcher serves files from disk during development; normal runs embed the compiled assets in the Go binary.
 
 ## Add pages and components
 
@@ -34,7 +34,7 @@ shadcn-templ is pinned as a Go tool and configured in `components.json`. To add 
 
 ```bash
 go tool shadcn-templ add card
-make web/build
+make server/build
 ```
 
-The CLI places component source in `internal/web/components` and shared helpers in `internal/web/utils`. `make web/build` runs Templ generation, the shadcn script bundle, Tailwind compilation, and the local HTMX copy. Commit the generated Go and `public` assets with the source changes so a checkout can run the server directly.
+The CLI places component source in `internal/web/components` and shared helpers in `internal/web/utils`. `make server/build` runs Templ generation, the shadcn script bundle, Tailwind compilation, the local HTMX copy, and the Go build. Commit the generated Go and `public` assets with the source changes so a checkout can run the server directly.

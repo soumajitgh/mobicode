@@ -6,9 +6,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/soumajitgh/mobicode/internal/store/model"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
+
+	"github.com/soumajitgh/mobicode/internal/store/model"
 )
 
 func TestStoreLifecycleAndExampleRepository(t *testing.T) {
@@ -77,7 +78,7 @@ func TestOpenRejectsNewerSchema(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.db.ExecContext(ctx, "INSERT INTO goose_db_version (version_id, is_applied) VALUES (1, 1)"); err != nil {
+	if _, err := s.db.ExecContext(ctx, "INSERT INTO goose_db_version (version_id, is_applied) VALUES (2, 1)"); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Close(); err != nil {

@@ -1,0 +1,14 @@
+.git
+.env
+.env.*
+!.env.example
+bin
+node_modules
+mobile
+website
+/db
+*.db
+*.db-shm
+*.db-wal
+.DS_Store
+/.pnpm-store/

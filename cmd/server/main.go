@@ -13,11 +13,12 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
-	"github.com/soumajitgh/mobicode/internal/app"
-	applogger "github.com/soumajitgh/mobicode/internal/logger"
-	"github.com/soumajitgh/mobicode/internal/store"
 	"go.uber.org/zap"
 	"gorm.io/gorm/logger"
+
+	"github.com/soumajitgh/mobicode/internal/app"
+	"github.com/soumajitgh/mobicode/internal/store"
+	apputils "github.com/soumajitgh/mobicode/internal/utils"
 )
 
 func main() {
@@ -29,12 +30,12 @@ func start() int {
 		fmt.Fprintf(os.Stderr, "load .env: %v\n", err)
 		return 1
 	}
-	log, err := applogger.New(os.Getenv("MOBICODE_SERVER_ENV"))
+	log, err := apputils.New(os.Getenv("MOBICODE_SERVER_ENV"))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	defer log.Sync()
+	defer func() { _ = log.Sync() }()
 	if err := run(log); err != nil {
 		log.Error("server failed", zap.Error(err))
 		return 1
@@ -43,6 +44,10 @@ func start() int {
 }
 
 func run(log *zap.Logger) error {
+	secret := os.Getenv("MOBICODE_SERVER_SECRET_TOKEN")
+	if len(secret) < 32 || strings.Contains(secret, "replace-with-") || strings.Trim(secret, string(secret[0])) == "" {
+		return fmt.Errorf("MOBICODE_SERVER_SECRET_TOKEN must be at least 32 bytes")
+	}
 	logLevel, err := parseGORMLogLevel(os.Getenv("MOBICODE_SERVER_DB_LOG_LEVEL"))
 	if err != nil {
 		return err

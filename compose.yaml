@@ -1,0 +1,43 @@
+services:
+  server:
+    build: .
+    working_dir: /workspace
+    env_file:
+      - .env
+    environment:
+      MOBICODE_SERVER_PORT: "8080"
+      MOBICODE_SERVER_DEV_ASSETS: "true"
+    command: go tool air -c .air.toml
+    ports:
+      - "${MOBICODE_SERVER_PORT:-8080}:8080"
+      - "${MOBICODE_RELOAD_PORT:-7331}:7331"
+    volumes:
+      - .:/workspace
+      - mobicode_db:/workspace/db
+      - go_modules:/go/pkg/mod
+      - go_build:/root/.cache/go-build
+    depends_on:
+      - assets
+
+  assets:
+    image: node:22-bookworm
+    working_dir: /workspace
+    command:
+      - sh
+      - -c
+      - |
+        corepack enable
+        pnpm install --frozen-lockfile --ignore-scripts --store-dir /pnpm/store
+        pnpm run htmx:copy
+        exec pnpm run css:watch
+    volumes:
+      - .:/workspace
+      - node_modules:/workspace/node_modules
+      - pnpm_store:/pnpm/store
+
+volumes:
+  mobicode_db:
+  go_modules:
+  go_build:
+  node_modules:
+  pnpm_store:
