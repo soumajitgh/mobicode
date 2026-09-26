@@ -1,7 +1,7 @@
 {
   "app": {
-    "entry": "App.tsx",
-    "components": "components/ui"
+    "entry": "app/_layout.tsx",
+    "components": "src/components/ui"
   },
   "tailwind": {
     "css": "global.css"

@@ -1,0 +1,4 @@
+src/api/graphql/generated/
+src/components/ui/
+node_modules/
+.expo/

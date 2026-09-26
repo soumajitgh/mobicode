@@ -1,5 +1,7 @@
 package config
 
+import "time"
+
 // Default configuration values.
 const (
 	DefaultEnvironment = "development"
@@ -11,6 +13,8 @@ const (
 	DefaultDBDirName   = "database"
 )
 
+const PairingLifetime = 3 * time.Minute
+
 // Environment variable names for Mobicode configuration.
 const (
 	EnvServerEnv         = "MOBICODE_SERVER_ENV"
@@ -20,4 +24,6 @@ const (
 	EnvServerSecretToken = "MOBICODE_SERVER_SECRET_TOKEN"
 	EnvServerDevAssets   = "MOBICODE_SERVER_DEV_ASSETS"
 	EnvServerPlayground  = "MOBICODE_SERVER_PLAYGROUND"
+	EnvServerBaseURL     = "MOBICODE_SERVER_BASE_URL"
+	EnvMobileAutoPair    = "MOBICODE_MOBILE_AUTO_PAIR"
 )

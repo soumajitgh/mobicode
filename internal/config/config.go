@@ -26,16 +26,24 @@ type Config struct {
 	Environment string         `validate:"required,oneof=development production"`
 	Server      ServerConfig   `validate:"required"`
 	Database    DatabaseConfig `validate:"required"`
+	Development DevelopmentConfig
 	Settings    SettingsConfig `validate:"required"`
 	Paths       PathsConfig    `validate:"required"`
 }
 
 // ServerConfig holds HTTP server configuration.
 type ServerConfig struct {
-	Port       int    `validate:"required,min=1,max=65535"`
-	DataDir    string `validate:"required,notblank"`
-	DevAssets  bool
-	Playground bool
+	Port            int    `validate:"required,min=1,max=65535"`
+	DataDir         string `validate:"required,notblank"`
+	DevAssets       bool
+	Playground      bool
+	BaseURL         string
+	ResolvedBaseURL string
+}
+
+// DevelopmentConfig holds opt-in features for trusted local development.
+type DevelopmentConfig struct {
+	MobileAutoPair bool
 }
 
 // DatabaseConfig holds database connection configuration.
@@ -125,6 +133,15 @@ func Load(filenames ...string) (*Config, error) {
 	}
 
 	// 8. Server DevAssets & Playground
+	cfg.Server.BaseURL = strings.TrimSpace(os.Getenv(EnvServerBaseURL))
+	if cfg.Server.BaseURL != "" {
+		cfg.Server.ResolvedBaseURL, err = normalizeBaseURL(cfg.Server.BaseURL)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		cfg.Server.ResolvedBaseURL = discoverBaseURL(cfg.Server.Port)
+	}
 	if devAssetsStr := strings.TrimSpace(os.Getenv(EnvServerDevAssets)); devAssetsStr != "" {
 		if val, err := strconv.ParseBool(devAssetsStr); err == nil {
 			cfg.Server.DevAssets = val
@@ -133,6 +150,13 @@ func Load(filenames ...string) (*Config, error) {
 	if playgroundStr := strings.TrimSpace(os.Getenv(EnvServerPlayground)); playgroundStr != "" {
 		if val, err := strconv.ParseBool(playgroundStr); err == nil {
 			cfg.Server.Playground = val
+		}
+	}
+	if cfg.Environment == "development" {
+		if autoPairStr := strings.TrimSpace(os.Getenv(EnvMobileAutoPair)); autoPairStr != "" {
+			if val, err := strconv.ParseBool(autoPairStr); err == nil {
+				cfg.Development.MobileAutoPair = val
+			}
 		}
 	}
 

@@ -24,6 +24,7 @@ type Store struct {
 	db       *sql.DB
 	Example  repository.ExampleRepository
 	Users    repository.UserRepository
+	Mobile   repository.MobileRepository
 	Sessions SessionStore
 }
 
@@ -48,7 +49,7 @@ func Open(ctx context.Context, cfg Config) (*Store, error) {
 	if err := runMigrations(ctx, sqlDB); err != nil {
 		return nil, fmt.Errorf("initialize database schema: %w", errors.Join(err, sqlDB.Close()))
 	}
-	return &Store{db: sqlDB, Example: repository.NewExample(db), Users: repository.NewUser(db), Sessions: SessionStore{DB: sqlDB}}, nil
+	return &Store{db: sqlDB, Example: repository.NewExample(db), Users: repository.NewUser(db), Mobile: repository.NewMobile(db), Sessions: SessionStore{DB: sqlDB}}, nil
 }
 
 // Close releases the database connection.

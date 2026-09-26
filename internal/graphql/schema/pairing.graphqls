@@ -1,0 +1,39 @@
+type Mutation {
+  createDevicePairing: DevicePairing!
+  claimDevicePairing(input: ClaimDevicePairingInput!): MobileSession!
+}
+
+type DevicePairing {
+  id: ID!
+  qrPayload: String!
+  expiresAt: Time!
+}
+
+input ClaimDevicePairingInput {
+  token: String!
+  device: DeviceInput!
+}
+
+input DeviceInput {
+  name: String!
+  platform: DevicePlatform!
+}
+
+enum DevicePlatform {
+  IOS
+  ANDROID
+}
+
+type MobileSession {
+  accessToken: String!
+  user: User!
+  device: MobileDevice!
+}
+
+type MobileDevice {
+  id: ID!
+  name: String!
+  platform: DevicePlatform!
+  createdAt: Time!
+  lastSeenAt: Time
+}

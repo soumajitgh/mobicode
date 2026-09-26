@@ -18,6 +18,7 @@ func clearEnv(t *testing.T) {
 		config.EnvServerPort,
 		config.EnvServerDevAssets,
 		config.EnvServerPlayground,
+		config.EnvMobileAutoPair,
 		config.EnvServerDataDir,
 		config.EnvServerDBLogLevel,
 		config.EnvServerSecretToken,
@@ -25,6 +26,28 @@ func clearEnv(t *testing.T) {
 	for _, key := range keys {
 		t.Setenv(key, "")
 		_ = os.Unsetenv(key)
+	}
+}
+
+func TestMobileAutoPairIsDevelopmentConfig(t *testing.T) {
+	clearEnv(t)
+	t.Setenv(config.EnvServerDataDir, t.TempDir())
+	t.Setenv(config.EnvServerSecretToken, validSecret)
+	t.Setenv(config.EnvMobileAutoPair, "true")
+	cfg, err := config.Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Development.MobileAutoPair {
+		t.Fatal("expected development auto pairing enabled")
+	}
+	t.Setenv(config.EnvServerEnv, "production")
+	cfg, err = config.Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Development.MobileAutoPair {
+		t.Fatal("production should ignore development auto pairing")
 	}
 }
 

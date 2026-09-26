@@ -1,5 +1,5 @@
 root = "."
-tmp_dir = "tmp"
+tmp_dir = "tmp/air"
 
 [build]
 cmd = "go tool templ generate -path internal/web && go tool shadcn-templ bundle && go build -o ./bin/mobicode-server ./cmd/server"

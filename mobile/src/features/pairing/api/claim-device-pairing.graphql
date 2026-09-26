@@ -1,0 +1,9 @@
+mutation ClaimDevicePairing($input: ClaimDevicePairingInput!) {
+  claimDevicePairing(input: $input) {
+    accessToken
+    user {
+      id
+      email
+    }
+  }
+}

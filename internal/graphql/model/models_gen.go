@@ -2,9 +2,106 @@
 
 package model
 
-type Health struct {
-	Status string `json:"status"`
+import (
+	"bytes"
+	"fmt"
+	"io"
+	"strconv"
+	"time"
+)
+
+type ClaimDevicePairingInput struct {
+	Token  string       `json:"token"`
+	Device *DeviceInput `json:"device"`
+}
+
+type DeviceInput struct {
+	Name     string         `json:"name"`
+	Platform DevicePlatform `json:"platform"`
+}
+
+type DevicePairing struct {
+	ID        string    `json:"id"`
+	QRPayload string    `json:"qrPayload"`
+	ExpiresAt time.Time `json:"expiresAt"`
+}
+
+type MobileDevice struct {
+	ID         string         `json:"id"`
+	Name       string         `json:"name"`
+	Platform   DevicePlatform `json:"platform"`
+	CreatedAt  time.Time      `json:"createdAt"`
+	LastSeenAt *time.Time     `json:"lastSeenAt,omitempty"`
+}
+
+type MobileSession struct {
+	AccessToken string        `json:"accessToken"`
+	User        *User         `json:"user"`
+	Device      *MobileDevice `json:"device"`
+}
+
+type Mutation struct {
 }
 
 type Query struct {
+}
+
+type User struct {
+	ID    string `json:"id"`
+	Email string `json:"email"`
+}
+
+type DevicePlatform string
+
+const (
+	DevicePlatformIos     DevicePlatform = "IOS"
+	DevicePlatformAndroid DevicePlatform = "ANDROID"
+)
+
+var AllDevicePlatform = []DevicePlatform{
+	DevicePlatformIos,
+	DevicePlatformAndroid,
+}
+
+func (e DevicePlatform) IsValid() bool {
+	switch e {
+	case DevicePlatformIos, DevicePlatformAndroid:
+		return true
+	}
+	return false
+}
+
+func (e DevicePlatform) String() string {
+	return string(e)
+}
+
+func (e *DevicePlatform) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = DevicePlatform(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid DevicePlatform", str)
+	}
+	return nil
+}
+
+func (e DevicePlatform) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *DevicePlatform) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e DevicePlatform) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
 }
