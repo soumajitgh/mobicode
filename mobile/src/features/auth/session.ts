@@ -32,7 +32,7 @@ export async function restoreSession(): Promise<Session | null> {
     if (!result.data?.viewer) {
       throw new AppError(
         'authentication_failure',
-        'your mobile session has expired. pair again.',
+        'Your mobile session has expired. Pair again.',
       );
     }
 
@@ -43,7 +43,7 @@ export async function restoreSession(): Promise<Session | null> {
         ? error
         : new AppError(
             'server_unavailable',
-            'could not restore your session. try again.',
+            'Could not restore your session. Try again.',
           );
     if (appError.code === 'authentication_failure') await removeSavedSession();
     throw appError;

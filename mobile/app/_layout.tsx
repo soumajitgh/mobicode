@@ -16,7 +16,7 @@ function Navigation() {
     return (
       <Screen>
         <ActivityIndicator
-          accessibilityLabel="restoring session"
+          accessibilityLabel="Restoring session"
           color={theme.colors.primary}
         />
       </Screen>

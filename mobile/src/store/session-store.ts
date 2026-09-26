@@ -46,7 +46,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
               ? error
               : new AppError(
                   'server_unavailable',
-                  'could not restore your session. try again.',
+                  'Could not restore your session. Try again.',
                 ),
           session: null,
         });

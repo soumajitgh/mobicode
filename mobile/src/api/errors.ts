@@ -23,7 +23,7 @@ export function fromGraphQLError(error: CombinedError): AppError {
   if (code === 'INVALID_ACCESS_TOKEN' || code === 'UNAUTHENTICATED') {
     return new AppError(
       'authentication_failure',
-      'your mobile session has expired. pair again.',
+      'Your mobile session has expired. Pair again.',
     );
   }
   if (
@@ -33,13 +33,13 @@ export function fromGraphQLError(error: CombinedError): AppError {
   ) {
     return new AppError(
       'invalid_pairing_payload',
-      'this pairing code is invalid or has expired.',
+      'This pairing code is invalid or has expired.',
     );
   }
   if (error.networkError) {
     return new AppError(
       'network_unavailable',
-      'cannot reach the mobicode server. check your connection.',
+      'Cannot reach the Mobicode server. Check your connection.',
     );
   }
   return new AppError('graphql_error', error.message);

@@ -7,9 +7,9 @@ import { theme } from '@/shared/theme';
 export default function NotFound() {
   return (
     <Screen>
-      <Text style={styles.text}>page not found.</Text>
+      <Text style={styles.text}>Page not found.</Text>
       <Link href="/" style={styles.link}>
-        go home
+        Go home
       </Link>
     </Screen>
   );
@@ -18,14 +18,8 @@ export default function NotFound() {
 const styles = StyleSheet.create({
   text: {
     color: theme.colors.text,
-    fontFamily: 'monospace',
-    fontVariant: ['small-caps'],
-    letterSpacing: 1,
   },
   link: {
     color: theme.colors.primary,
-    fontFamily: 'monospace',
-    fontVariant: ['small-caps'],
-    letterSpacing: 1,
   },
 });

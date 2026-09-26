@@ -9,7 +9,7 @@ type PairingStore = {
   busy: boolean;
   error: string | null;
   setPayload: (payload: string) => void;
-  submit: () => Promise<void>;
+  submit: (onClaimed?: () => Promise<void>) => Promise<void>;
 };
 
 export const usePairingStore = create<PairingStore>((set, get) => ({
@@ -19,11 +19,12 @@ export const usePairingStore = create<PairingStore>((set, get) => ({
 
   setPayload: (payload) => set({ payload, error: null }),
 
-  submit: async () => {
+  submit: async (onClaimed) => {
     if (get().busy) return;
     set({ busy: true, error: null });
     try {
       const session = await claimPairing(get().payload);
+      await onClaimed?.();
       await useSessionStore.getState().signIn(session);
       set({ payload: '', error: null });
     } catch (error) {
@@ -31,7 +32,7 @@ export const usePairingStore = create<PairingStore>((set, get) => ({
         error:
           error instanceof AppError
             ? error.message
-            : 'could not complete pairing. try again.',
+            : 'Could not complete pairing. Try again.',
       });
     } finally {
       set({ busy: false });

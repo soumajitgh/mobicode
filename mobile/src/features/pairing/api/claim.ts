@@ -12,7 +12,7 @@ export async function claimPairing(payload: string) {
       input: {
         token,
         device: {
-          name: 'mobicode mobile device',
+          name: 'Mobicode mobile device',
           platform: Platform.OS === 'ios' ? 'IOS' : 'ANDROID',
         },
       },
@@ -22,7 +22,7 @@ export async function claimPairing(payload: string) {
   if (!result.data?.claimDevicePairing)
     throw new AppError(
       'incompatible_server',
-      'this server did not return a mobile session.',
+      'This server did not return a mobile session.',
     );
   return {
     serverBaseURL,
