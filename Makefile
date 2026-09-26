@@ -1,4 +1,4 @@
-.PHONY: help init server/dev server/build server/fmt server/check mobile/install mobile/start mobile/android mobile/ios mobile/web mobile/lint mobile/typecheck website/install website/start website/build
+.PHONY: help init server/dev server/build server/test server/test-race server/test-e2e server/fmt server/check mobile/install mobile/start mobile/android mobile/ios mobile/web mobile/lint mobile/typecheck website/install website/start website/build
 
 GO ?= go
 GOLANGCI_LINT ?= golangci-lint
@@ -13,6 +13,9 @@ help:
 	  'Server:' \
 	  '  make server/dev         Run Air with Go, Templ, and CSS reload' \
 	  '  make server/build       Build bin/mobicode-server' \
+	  '  make server/test        Run package and integration tests' \
+	  '  make server/test-race   Run package and integration tests with the race detector' \
+	  '  make server/test-e2e    Run Playwright browser tests' \
 	  '  make server/fmt         Format Go source with gofumpt and goimports' \
 	  '  make server/check       Run go vet and Go linters' \
 	  'Mobile:' \
@@ -43,6 +46,15 @@ server/build:
 	$(PNPM) run build
 	@mkdir -p bin
 	$(GO) build -o bin/mobicode-server ./cmd/server
+
+server/test:
+	$(GO) test ./cmd/... ./internal/... ./tests/integration/...
+
+server/test-race:
+	$(GO) test -race ./cmd/... ./internal/... ./tests/integration/...
+
+server/test-e2e:
+	$(PNPM) run test:e2e
 
 server/fmt:
 	$(GOLANGCI_LINT) fmt

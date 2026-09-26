@@ -17,7 +17,7 @@ This repository contains the Go server, browser app, mobile app, and documentati
 
 ## Run locally
 
-Use Go 1.26.5, Node.js 22 or newer, and pnpm 11.27.1. From a fresh clone, run `make init` to create `.env` (if missing), download Go dependencies, install the locked dependencies for the web app, mobile app, and website, and build browser assets. You can run it again without replacing an existing `.env`.
+Use Go 1.26.5, Node.js 22 or newer, and pnpm 11.27.1. From a fresh clone, run `make init` to create `.env` (if missing), download Go dependencies, install the locked dependencies for the web app, mobile app, and website, install the Playwright Chromium browser, and build browser assets. You can run it again without replacing an existing `.env`.
 
 `MOBICODE_SERVER_ENV` defaults to `development` for readable console logs. Set it to `production` for JSON logs. Both use Zap's built-in defaults; HTTP completion logs include method, path, status, duration, and request ID.
 
