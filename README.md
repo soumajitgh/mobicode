@@ -26,11 +26,15 @@ Run `make help` to see the daily development commands. The most common are:
 - Server: run `make server/dev` after initialization (listens on `:8080` by default; set `MOBICODE_SERVER_PORT` to change the port; `GET /healthz` returns `ok`)
 - Database: set `MOBICODE_SERVER_DB_PATH` in `.env` to choose the SQLite file (default `db/mobicode.db`). GORM logging defaults to `warn`. Startup runs embedded Goose migrations before serving requests.
 - GraphQL: send POST requests to `/mobile/graphql`; the playground is disabled by default
-- Schema changes: edit `internal/graphql/schema/*.graphqls`, run `make gql`, then implement the generated resolver using services from `internal/app`
+- Schema changes: edit `internal/graphql/schema/*.graphqls`, run `make server/gql`, then implement the generated resolver using services from `internal/app`
 - Browser app: run `make server/dev` after initialization; open `http://localhost:8080/`
-- Browser development: run `make web/watch` and open `http://localhost:7331/` for reloads (`WEB_PORT=8090` changes the app port)
+- Browser development: run `make server/watch` and open `http://localhost:7331/` for reloads (`WEB_PORT=8090` changes the app port)
 - Mobile: `make mobile/start` (or `make mobile/android`, `make mobile/ios`, `make mobile/web`)
 - Website: `make website/start`
+
+## Go formatting and linting
+
+Install [golangci-lint v2](https://golangci-lint.run/docs/welcome/install/local/) locally (built with Go 1.26.5 or newer), then run `make server/fmt` to format hand-written Go files with gofumpt and goimports. Run `make server/lint` for govet, staticcheck, errcheck, ineffassign, and unused; `make server/check` also runs `go vet ./...` directly. The formatter skips generated Go files. Run `golangci-lint run --fix` when you want available lint fixes applied automatically.
 
 ## Run with Docker Compose
 

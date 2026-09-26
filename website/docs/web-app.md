@@ -11,8 +11,8 @@ The browser app uses Go, Templ, HTMX, Tailwind CSS, and shadcn-templ. It runs on
 From the repository root:
 
 ```bash
-make web/install
-make web/build
+make server/install
+make server/assets
 make server/dev
 ```
 
@@ -21,7 +21,7 @@ Open `http://localhost:8080/`. The home page's **Check server** button requests 
 For development with Templ reload and Tailwind watching:
 
 ```bash
-make web/watch
+make server/watch
 ```
 
 Open the reload proxy at `http://localhost:7331/`. Set `WEB_PORT=8090` on the make command to choose another app port. The CSS watcher serves files from disk during development; normal runs embed the compiled assets in the Go binary.
@@ -34,7 +34,7 @@ shadcn-templ is pinned as a Go tool and configured in `components.json`. To add 
 
 ```bash
 go tool shadcn-templ add card
-make web/build
+make server/assets
 ```
 
-The CLI places component source in `internal/web/components` and shared helpers in `internal/web/utils`. `make web/build` runs Templ generation, the shadcn script bundle, Tailwind compilation, and the local HTMX copy. Commit the generated Go and `public` assets with the source changes so a checkout can run the server directly.
+The CLI places component source in `internal/web/components` and shared helpers in `internal/web/utils`. `make server/assets` runs Templ generation, the shadcn script bundle, Tailwind compilation, and the local HTMX copy. Commit the generated Go and `public` assets with the source changes so a checkout can run the server directly.

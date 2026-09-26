@@ -4,8 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/soumajitgh/mobicode/internal/store/model"
 	"gorm.io/gorm"
+
+	"github.com/soumajitgh/mobicode/internal/store/model"
 )
 
 // ExampleRepository is the persistence contract for the example model.

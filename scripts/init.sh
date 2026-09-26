@@ -32,7 +32,7 @@ printf 'Downloading Go dependencies...\n'
 "$go_cmd" mod download
 
 printf 'Installing root web dependencies...\n'
-"$make_cmd" web/install GO="$go_cmd" PNPM="$pnpm_cmd"
+"$make_cmd" server/install GO="$go_cmd" PNPM="$pnpm_cmd"
 
 printf 'Installing mobile dependencies...\n'
 "$make_cmd" mobile/install GO="$go_cmd" PNPM="$pnpm_cmd"
@@ -41,6 +41,6 @@ printf 'Installing website dependencies...\n'
 "$make_cmd" website/install GO="$go_cmd" PNPM="$pnpm_cmd"
 
 printf 'Building browser assets...\n'
-"$make_cmd" web/build GO="$go_cmd" PNPM="$pnpm_cmd"
+"$make_cmd" server/assets GO="$go_cmd" PNPM="$pnpm_cmd"
 
 printf 'Setup complete. Run make server/dev, make mobile/start, or make website/start.\n'

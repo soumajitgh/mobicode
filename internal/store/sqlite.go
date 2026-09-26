@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -39,8 +40,7 @@ func openSQLite(ctx context.Context, path string, logLevel logger.LogLevel) (*go
 	sqlDB.SetMaxOpenConns(1)
 	sqlDB.SetMaxIdleConns(1)
 	if err := sqlDB.PingContext(ctx); err != nil {
-		sqlDB.Close()
-		return nil, fmt.Errorf("verify SQLite connectivity: %w", err)
+		return nil, fmt.Errorf("verify SQLite connectivity: %w", errors.Join(err, sqlDB.Close()))
 	}
 	return db, nil
 }

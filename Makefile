@@ -1,6 +1,7 @@
-.PHONY: help init server/dev server/build server/fmt server/check gql templ shadcn generate web/install web/build web/watch web/serve mobile/install mobile/start mobile/android mobile/ios mobile/web mobile/lint mobile/typecheck website/install website/start website/build
+.PHONY: help init server/install server/gql server/templ server/shadcn server/generate server/assets server/dev server/build server/serve server/watch server/fmt server/lint server/check mobile/install mobile/start mobile/android mobile/ios mobile/web mobile/lint mobile/typecheck website/install website/start website/build
 
 GO ?= go
+GOLANGCI_LINT ?= golangci-lint
 PNPM ?= pnpm
 WEB_PORT ?= 8080
 
@@ -9,18 +10,15 @@ help:
 	  'Setup:' \
 	  '  make init               Set up a fresh clone (Go, web, mobile, website)' \
 	  'Server:' \
-	  '  make server/dev         Run the Go API (MOBICODE_SERVER_PORT=8080 by default)' \
+	  '  make server/install     Install browser asset dependencies' \
+	  '  make server/generate    Generate GraphQL, Templ, and component code' \
+	  '  make server/assets      Build browser assets' \
+	  '  make server/dev         Build assets and run the Go server' \
 	  '  make server/build       Build bin/mobicode-server' \
-	  '  make server/fmt         Format Go source' \
-	  '  make server/check       Run go vet' \
-	  '  make gql                Generate GraphQL code' \
-	  '  make templ              Generate Go code from Templ pages' \
-	  '  make shadcn             Bundle shadcn-templ component scripts' \
-	  '  make generate           Run all code generators' \
-	  'Web app:' \
-	  '  make web/install        Install Tailwind and HTMX build tools' \
-	  '  make web/build          Generate Templ and compile web assets' \
-	  '  make web/watch          Watch Templ/Go and Tailwind (proxy on :7331)' \
+	  '  make server/watch       Watch Templ and CSS (proxy on :7331)' \
+	  '  make server/fmt         Format Go source with gofumpt and goimports' \
+	  '  make server/lint        Run Go linters' \
+	  '  make server/check       Run go vet and Go linters' \
 	  'Mobile:' \
 	  '  make mobile/install     Install locked dependencies' \
 	  '  make mobile/start       Start Expo' \
@@ -37,44 +35,48 @@ help:
 init:
 	@GO="$(GO)" PNPM="$(PNPM)" sh scripts/init.sh
 
-server/dev: web/build
+server/install:
+	$(PNPM) install --frozen-lockfile
+
+server/gql:
+	$(GO) run github.com/99designs/gqlgen generate
+
+server/templ:
+	$(GO) tool templ generate -path internal/web
+
+server/shadcn:
+	$(GO) tool shadcn-templ bundle
+
+server/generate: server/gql server/templ server/shadcn
+
+server/assets: server/templ server/shadcn
+	$(PNPM) run build
+
+server/dev: server/assets
 	$(GO) run ./cmd/server
 
-server/build: web/build
+server/build: server/assets
 	@mkdir -p bin
 	$(GO) build -o bin/mobicode-server ./cmd/server
 
-server/fmt:
-	$(GO)fmt -w cmd internal
-
-server/check:
-	$(GO) vet ./...
-
-gql:
-	$(GO) run github.com/99designs/gqlgen generate
-
-templ:
-	$(GO) tool templ generate -path internal/web
-
-shadcn:
-	$(GO) tool shadcn-templ bundle
-
-generate: gql templ shadcn
-
-web/install:
-	$(PNPM) install --frozen-lockfile
-
-web/build: templ shadcn
-	$(PNPM) run build
-
-web/serve:
+server/serve:
 	MOBICODE_SERVER_DEV_ASSETS=true MOBICODE_SERVER_PORT=$(WEB_PORT) $(GO) run ./cmd/server
 
-web/watch: web/build
+server/watch: server/assets
 	@$(PNPM) run css:watch & css_pid=$$!; \
 	$(GO) tool shadcn-templ bundle --watch & scripts_pid=$$!; \
 	trap 'kill $$css_pid $$scripts_pid 2>/dev/null || true' EXIT INT TERM; \
-	$(GO) tool templ generate -path internal/web -watch -cmd="$(MAKE) -C ../.. web/serve WEB_PORT=$(WEB_PORT)" -proxy="http://localhost:$(WEB_PORT)" -open-browser=false
+	$(GO) tool templ generate -path internal/web -watch -cmd="$(MAKE) -C ../.. server/serve WEB_PORT=$(WEB_PORT)" -proxy="http://localhost:$(WEB_PORT)" -open-browser=false
+
+server/fmt:
+	$(GOLANGCI_LINT) fmt
+
+server/lint:
+	$(GOLANGCI_LINT) run
+
+server/check:
+	$(GO) vet ./...
+	$(MAKE) server/lint
 
 mobile/install:
 	cd mobile && $(PNPM) install --frozen-lockfile
