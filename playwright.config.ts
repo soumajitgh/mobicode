@@ -32,7 +32,7 @@ export default defineConfig({
       ...process.env,
       MOBICODE_SERVER_ENV: 'development',
       MOBICODE_SERVER_PORT: '18080',
-      MOBICODE_SERVER_DB_PATH: join(testDirectory, 'mobicode.db'),
+      MOBICODE_SERVER_DATA_DIR: testDirectory,
       MOBICODE_SERVER_DB_LOG_LEVEL: 'silent',
       MOBICODE_SERVER_SECRET_TOKEN: 'e2e-recovery-token-with-at-least-32-bytes',
     },

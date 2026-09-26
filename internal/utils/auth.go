@@ -2,18 +2,22 @@ package utils
 
 import (
 	"crypto/subtle"
-	"net/mail"
 	"strings"
+
+	"github.com/go-playground/validator/v10"
 )
+
+var validate = validator.New()
 
 func NormalizeEmail(email string) string { return strings.ToLower(strings.TrimSpace(email)) }
 
 func ValidEmail(email string) bool {
-	addr, err := mail.ParseAddress(email)
-	return err == nil && addr.Address == email && len(email) <= 254
+	return validate.Var(email, "required,email,max=254") == nil
 }
 
-func ValidPassword(password string) bool { return len(password) >= 12 && len(password) <= 128 }
+func ValidPassword(password string) bool {
+	return validate.Var(password, "required,min=12,max=128") == nil
+}
 
 func ValidRecoveryToken(token, expected string) bool {
 	return expected != "" && subtle.ConstantTimeCompare([]byte(token), []byte(expected)) == 1

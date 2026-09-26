@@ -2,15 +2,13 @@ package app
 
 import (
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/alexedwards/scs/v2"
-
-	"github.com/soumajitgh/mobicode/internal/auth"
-
 	"go.uber.org/zap"
 
+	"github.com/soumajitgh/mobicode/internal/auth"
+	"github.com/soumajitgh/mobicode/internal/config"
 	appgraphql "github.com/soumajitgh/mobicode/internal/graphql"
 	"github.com/soumajitgh/mobicode/internal/health"
 	apphttp "github.com/soumajitgh/mobicode/internal/http"
@@ -19,7 +17,7 @@ import (
 )
 
 // New assembles dependencies for the HTTP application.
-func New(persistence *store.Store, log *zap.Logger) http.Handler {
+func New(cfg *config.Config, persistence *store.Store, log *zap.Logger) http.Handler {
 	healthService := &health.Service{}
 	resolver := &appgraphql.Resolver{HealthService: healthService, Store: persistence}
 	sessions := scs.New()
@@ -29,17 +27,18 @@ func New(persistence *store.Store, log *zap.Logger) http.Handler {
 	sessions.Cookie.HttpOnly = true
 	sessions.Cookie.SameSite = http.SameSiteLaxMode
 	sessions.Cookie.Path = "/"
-	sessions.Cookie.Secure = os.Getenv("MOBICODE_SERVER_ENV") == "production"
-	browserAuth := handlers.NewAuth(&auth.Service{Users: persistence.Users, RecoveryToken: os.Getenv("MOBICODE_SERVER_SECRET_TOKEN")}, sessions, persistence.Users)
+	sessions.Cookie.Secure = cfg.Environment == "production"
+	browserAuth := handlers.NewAuth(&auth.Service{Users: persistence.Users, RecoveryToken: cfg.Settings.SecretToken}, sessions, persistence.Users)
 	onboarding := handlers.NewOnboarding(browserAuth, persistence.Users, sessions)
 	webHandler := &handlers.Handler{HealthService: healthService, Sessions: sessions}
 	return apphttp.NewRouter(
 		resolver,
 		webHandler,
-		os.Getenv("MOBICODE_SERVER_PLAYGROUND") == "true",
-		os.Getenv("MOBICODE_SERVER_DEV_ASSETS") == "true",
+		cfg.Server.Playground,
+		cfg.Server.DevAssets,
 		log,
 		browserAuth,
 		onboarding,
+		cfg.Environment != "production",
 	)
 }
