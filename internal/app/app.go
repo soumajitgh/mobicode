@@ -39,6 +39,5 @@ func New(cfg *config.Config, persistence *store.Store, log *zap.Logger) http.Han
 		log,
 		browserAuth,
 		onboarding,
-		cfg.Environment != "production",
 	)
 }

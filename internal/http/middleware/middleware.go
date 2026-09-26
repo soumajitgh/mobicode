@@ -7,8 +7,8 @@ import (
 )
 
 // Apply installs middleware shared by all API routes.
-func Apply(r chi.Router, log *zap.Logger, development ...bool) {
+func Apply(r chi.Router, log *zap.Logger) {
 	r.Use(chimiddleware.RequestID)
-	r.Use(Logging(log, development...))
+	r.Use(Logging(log))
 	r.Use(chimiddleware.Recoverer)
 }
