@@ -1,9 +1,11 @@
 schema:
   - internal/graphql/schema/*.graphqls
 
+skip_mod_tidy: true
+
 exec:
-  filename: internal/graphql/generated.go
-  package: graphql
+  filename: internal/graphql/generated/generated.go
+  package: generated
 
 model:
   filename: internal/graphql/model/models_gen.go
@@ -11,5 +13,5 @@ model:
 
 resolver:
   layout: follow-schema
-  dir: internal/graphql
-  package: graphql
+  dir: internal/graphql/resolver
+  package: resolver

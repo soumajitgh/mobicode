@@ -9,9 +9,10 @@ import (
 
 	"github.com/soumajitgh/mobicode/internal/auth"
 	"github.com/soumajitgh/mobicode/internal/config"
-	appgraphql "github.com/soumajitgh/mobicode/internal/graphql"
+	"github.com/soumajitgh/mobicode/internal/graphql/resolver"
 	"github.com/soumajitgh/mobicode/internal/health"
 	apphttp "github.com/soumajitgh/mobicode/internal/http"
+	"github.com/soumajitgh/mobicode/internal/pairing"
 	"github.com/soumajitgh/mobicode/internal/store"
 	"github.com/soumajitgh/mobicode/internal/web/handlers"
 )
@@ -19,7 +20,7 @@ import (
 // New assembles dependencies for the HTTP application.
 func New(cfg *config.Config, persistence *store.Store, log *zap.Logger) http.Handler {
 	healthService := &health.Service{}
-	resolver := &appgraphql.Resolver{HealthService: healthService, Store: persistence}
+	graphqlResolver := &resolver.Resolver{Pairing: &pairing.Service{Repository: persistence.Mobile, BaseURL: cfg.Server.ResolvedBaseURL}}
 	sessions := scs.New()
 	sessions.Store = persistence.Sessions
 	sessions.Lifetime = 24 * time.Hour
@@ -32,7 +33,8 @@ func New(cfg *config.Config, persistence *store.Store, log *zap.Logger) http.Han
 	onboarding := handlers.NewOnboarding(browserAuth, persistence.Users, sessions)
 	webHandler := &handlers.Handler{HealthService: healthService, Sessions: sessions}
 	return apphttp.NewRouter(
-		resolver,
+		graphqlResolver,
+		persistence.Mobile,
 		webHandler,
 		cfg.Server.Playground,
 		cfg.Server.DevAssets,

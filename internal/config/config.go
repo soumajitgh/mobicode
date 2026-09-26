@@ -32,10 +32,12 @@ type Config struct {
 
 // ServerConfig holds HTTP server configuration.
 type ServerConfig struct {
-	Port       int    `validate:"required,min=1,max=65535"`
-	DataDir    string `validate:"required,notblank"`
-	DevAssets  bool
-	Playground bool
+	Port            int    `validate:"required,min=1,max=65535"`
+	DataDir         string `validate:"required,notblank"`
+	DevAssets       bool
+	Playground      bool
+	BaseURL         string
+	ResolvedBaseURL string
 }
 
 // DatabaseConfig holds database connection configuration.
@@ -125,6 +127,15 @@ func Load(filenames ...string) (*Config, error) {
 	}
 
 	// 8. Server DevAssets & Playground
+	cfg.Server.BaseURL = strings.TrimSpace(os.Getenv(EnvServerBaseURL))
+	if cfg.Server.BaseURL != "" {
+		cfg.Server.ResolvedBaseURL, err = normalizeBaseURL(cfg.Server.BaseURL)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		cfg.Server.ResolvedBaseURL = discoverBaseURL(cfg.Server.Port)
+	}
 	if devAssetsStr := strings.TrimSpace(os.Getenv(EnvServerDevAssets)); devAssetsStr != "" {
 		if val, err := strconv.ParseBool(devAssetsStr); err == nil {
 			cfg.Server.DevAssets = val
