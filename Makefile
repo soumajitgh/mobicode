@@ -1,4 +1,4 @@
-.PHONY: help init server/dev server/build server/test server/test-race server/fmt server/check e2e/install e2e/test mobile/install mobile/start mobile/android mobile/ios mobile/web mobile/lint mobile/typecheck website/install website/start website/build
+.PHONY: help init server/dev server/build server/test server/test-race server/test-e2e server/fmt server/check mobile/install mobile/start mobile/android mobile/ios mobile/web mobile/lint mobile/typecheck website/install website/start website/build
 
 GO ?= go
 GOLANGCI_LINT ?= golangci-lint
@@ -15,11 +15,9 @@ help:
 	  '  make server/build       Build bin/mobicode-server' \
 	  '  make server/test        Run package and integration tests' \
 	  '  make server/test-race   Run package and integration tests with the race detector' \
+	  '  make server/test-e2e    Run Playwright browser tests' \
 	  '  make server/fmt         Format Go source with gofumpt and goimports' \
 	  '  make server/check       Run go vet and Go linters' \
-	  'End-to-end:' \
-	  '  make e2e/install        Install the Playwright Chromium browser' \
-	  '  make e2e/test           Run browser end-to-end tests' \
 	  'Mobile:' \
 	  '  make mobile/install     Install locked dependencies' \
 	  '  make mobile/start       Start Expo' \
@@ -55,18 +53,15 @@ server/test:
 server/test-race:
 	$(GO) test -race ./cmd/... ./internal/... ./tests/integration/...
 
+server/test-e2e:
+	$(PNPM) run test:e2e
+
 server/fmt:
 	$(GOLANGCI_LINT) fmt
 
 server/check:
 	$(GO) vet ./...
 	$(GOLANGCI_LINT) run
-
-e2e/install:
-	$(PNPM) exec playwright install chromium
-
-e2e/test:
-	$(PNPM) run test:e2e
 
 mobile/install:
 	cd mobile && $(PNPM) install --frozen-lockfile
