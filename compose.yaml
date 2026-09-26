@@ -27,7 +27,7 @@ services:
       - -c
       - |
         corepack enable
-        pnpm install --frozen-lockfile --store-dir /pnpm/store
+        pnpm install --frozen-lockfile --ignore-scripts --store-dir /pnpm/store
         pnpm run htmx:copy
         exec pnpm run css:watch
     volumes:
