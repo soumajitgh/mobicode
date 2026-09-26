@@ -1,27 +1,46 @@
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
-import { Linking, StyleSheet, Text, View } from 'react-native';
+import { ApolloProvider } from '@apollo/client/react';
+import { QueryClient, QueryClientProvider, focusManager, useQuery } from '@tanstack/react-query';
+import { useEffect } from 'react';
+import { AppState, Linking, Platform, StyleSheet, Text, View } from 'react-native';
 
 import { GluestackUIProvider } from '@/components/ui/gluestack-ui-provider';
 import { Button, ButtonText } from '@/components/ui/button';
 import '@/global.css';
-import { PairedUser, restoreOrAutoPair } from './session';
+import { restoreOrAutoPair } from './session';
+import { apolloClient } from './src/lib/apollo';
+
+const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
 export default function App() {
-  const [user, setUser] = useState<PairedUser | null>(null);
-
   useEffect(() => {
-    let mounted = true;
-    void restoreOrAutoPair().then((paired) => {
-      if (mounted) setUser(paired);
-    }).catch(() => {
-      // The starter screen remains available when development pairing fails.
+    if (Platform.OS === 'web') return;
+    const subscription = AppState.addEventListener('change', (state) => {
+      focusManager.setFocused(state === 'active');
     });
-    return () => { mounted = false; };
+    return () => subscription.remove();
   }, []);
 
   return (
-    <GluestackUIProvider mode="light">
+    <ApolloProvider client={apolloClient}>
+      <QueryClientProvider client={queryClient}>
+        <GluestackUIProvider mode="light">
+          <Home />
+        </GluestackUIProvider>
+      </QueryClientProvider>
+    </ApolloProvider>
+  );
+}
+
+function Home() {
+  const { data: user } = useQuery({
+    queryKey: ['mobile', 'session'],
+    queryFn: restoreOrAutoPair,
+    staleTime: Infinity,
+  });
+
+  return (
+    <>
       <View style={styles.container}>
         <Text style={styles.eyebrow}>MOBICODE</Text>
         <Text style={styles.title}>{user ? 'Device paired.' : 'Code from anywhere.'}</Text>
@@ -31,9 +50,9 @@ export default function App() {
         <Button onPress={() => void Linking.openURL('https://soumajitgh.github.io/mobicode/')}>
           <ButtonText>Read the docs</ButtonText>
         </Button>
-        <StatusBar style="auto" />
       </View>
-    </GluestackUIProvider>
+      <StatusBar style="auto" />
+    </>
   );
 }
 
