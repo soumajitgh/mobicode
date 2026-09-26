@@ -21,47 +21,25 @@ const (
 	DatabaseLogLevelInfo   DatabaseLogLevel = "info"
 )
 
-// Environment variable names for Mobicode configuration.
-const (
-	EnvServerEnv         = "MOBICODE_SERVER_ENV"
-	EnvServerPort        = "MOBICODE_SERVER_PORT"
-	EnvServerDevAssets   = "MOBICODE_SERVER_DEV_ASSETS"
-	EnvServerPlayground  = "MOBICODE_SERVER_PLAYGROUND"
-	EnvServerDataDir     = "MOBICODE_SERVER_DATA_DIR"
-	EnvServerDBPath      = "MOBICODE_SERVER_DB_PATH"
-	EnvServerDBLogLevel  = "MOBICODE_SERVER_DB_LOG_LEVEL"
-	EnvServerSecretToken = "MOBICODE_SERVER_SECRET_TOKEN"
-)
-
-// Default configuration values.
-const (
-	DefaultEnvironment = "development"
-	DefaultServerPort  = 8080
-	DefaultDBLogLevel  = DatabaseLogLevelWarn
-	DefaultDBFilename  = "mobicode.db"
-)
-
-// DefaultDataDir defines the default base directory for application data.
-var DefaultDataDir = filepath.Join("tmp", "database")
-
 // Config holds the validated application configuration.
 type Config struct {
 	Environment string
 	Server      ServerConfig
 	Database    DatabaseConfig
 	Settings    SettingsConfig
+	Paths       PathsConfig
 }
 
 // ServerConfig holds HTTP server configuration.
 type ServerConfig struct {
 	Port       int
+	DataDir    string
 	DevAssets  bool
 	Playground bool
 }
 
 // DatabaseConfig holds database connection configuration.
 type DatabaseConfig struct {
-	DataDir  string
 	Path     string
 	LogLevel DatabaseLogLevel
 }
@@ -71,8 +49,16 @@ type SettingsConfig struct {
 	SecretToken string
 }
 
-// Load loads configuration from optional .env files, environment variables, applies defaults, and validates.
+// PathsConfig holds fully resolved file and directory paths.
+type PathsConfig struct {
+	ConfigFile   string
+	DatabaseDir  string
+	DatabaseFile string
+}
+
+// Load loads configuration following the prescribed initialization sequence.
 func Load(filenames ...string) (*Config, error) {
+	// 1. Load optional .env
 	if len(filenames) == 0 {
 		if err := godotenv.Load(); err != nil && !errors.Is(err, os.ErrNotExist) && !os.IsNotExist(err) {
 			return nil, fmt.Errorf("load .env: %w", err)
@@ -88,16 +74,45 @@ func Load(filenames ...string) (*Config, error) {
 		}
 	}
 
-	cfg := &Config{}
+	// 2. Resolve MOBICODE_SERVER_DATA_DIR, or ~/.mobicode if empty
+	dataDir, err := resolveDataDir()
+	if err != nil {
+		return nil, err
+	}
 
-	// Server Environment
+	// 3. Create data directory and database directory
+	dbDir, err := initDirectories(dataDir)
+	if err != nil {
+		return nil, err
+	}
+
+	// 4. Create config.toml if missing and load it
+	configFile, err := ensureConfigFile(dataDir)
+	if err != nil {
+		return nil, err
+	}
+
+	// 5. Derive paths
+	paths := PathsConfig{
+		ConfigFile:   configFile,
+		DatabaseDir:  dbDir,
+		DatabaseFile: filepath.Join(dbDir, DefaultDBFilename),
+	}
+
+	cfg := &Config{
+		Paths: paths,
+	}
+	cfg.Server.DataDir = dataDir
+	cfg.Database.Path = paths.DatabaseFile
+
+	// 6. Server Environment
 	env := strings.TrimSpace(os.Getenv(EnvServerEnv))
 	if env == "" {
 		env = DefaultEnvironment
 	}
 	cfg.Environment = env
 
-	// Server Port
+	// 7. Server Port
 	portStr := strings.TrimSpace(os.Getenv(EnvServerPort))
 	if portStr == "" {
 		cfg.Server.Port = DefaultServerPort
@@ -109,38 +124,19 @@ func Load(filenames ...string) (*Config, error) {
 		cfg.Server.Port = port
 	}
 
-	// Server DevAssets
+	// 8. Server DevAssets & Playground
 	if devAssetsStr := strings.TrimSpace(os.Getenv(EnvServerDevAssets)); devAssetsStr != "" {
 		if val, err := strconv.ParseBool(devAssetsStr); err == nil {
 			cfg.Server.DevAssets = val
 		}
 	}
-
-	// Server Playground
 	if playgroundStr := strings.TrimSpace(os.Getenv(EnvServerPlayground)); playgroundStr != "" {
 		if val, err := strconv.ParseBool(playgroundStr); err == nil {
 			cfg.Server.Playground = val
 		}
 	}
 
-	// Database DataDir & Path
-	dataDir := strings.TrimSpace(os.Getenv(EnvServerDataDir))
-	if dataDir == "" {
-		dataDir = DefaultDataDir
-	}
-	cfg.Database.DataDir = dataDir
-
-	dbPath := strings.TrimSpace(os.Getenv(EnvServerDBPath))
-	if dbPath == "" {
-		cfg.Database.Path = filepath.Join(cfg.Database.DataDir, DefaultDBFilename)
-	} else {
-		cfg.Database.Path = dbPath
-		if strings.TrimSpace(os.Getenv(EnvServerDataDir)) == "" {
-			cfg.Database.DataDir = filepath.Dir(dbPath)
-		}
-	}
-
-	// Database LogLevel
+	// 9. Database LogLevel
 	dbLogLevelStr := strings.ToLower(strings.TrimSpace(os.Getenv(EnvServerDBLogLevel)))
 	if dbLogLevelStr == "" {
 		cfg.Database.LogLevel = DefaultDBLogLevel
@@ -148,9 +144,10 @@ func Load(filenames ...string) (*Config, error) {
 		cfg.Database.LogLevel = DatabaseLogLevel(dbLogLevelStr)
 	}
 
-	// Settings SecretToken
+	// 10. Settings SecretToken
 	cfg.Settings.SecretToken = os.Getenv(EnvServerSecretToken)
 
+	// 11. Validate configuration
 	if err := Validate(cfg); err != nil {
 		return nil, err
 	}

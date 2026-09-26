@@ -8,7 +8,7 @@ import (
 // Validate checks whether the given Config conforms to Mobicode requirements.
 func Validate(cfg *Config) error {
 	if cfg == nil {
-		return fmt.Errorf("config is nil")
+		return fmt.Errorf("validate configuration: config is nil")
 	}
 
 	// Environment validation
@@ -24,9 +24,9 @@ func Validate(cfg *Config) error {
 		return fmt.Errorf("%s must be between 1 and 65535", EnvServerPort)
 	}
 
-	// Database Path validation
-	if strings.TrimSpace(cfg.Database.Path) == "" {
-		return fmt.Errorf("%s must not be empty", EnvServerDBPath)
+	// Server DataDir validation
+	if strings.TrimSpace(cfg.Server.DataDir) == "" {
+		return fmt.Errorf("%s must not be empty", EnvServerDataDir)
 	}
 
 	// Database LogLevel validation
@@ -50,6 +50,17 @@ func Validate(cfg *Config) error {
 	}
 	if strings.Trim(secret, string(secret[0])) == "" {
 		return fmt.Errorf("%s cannot consist of repeated characters", EnvServerSecretToken)
+	}
+
+	// Paths validation
+	if strings.TrimSpace(cfg.Paths.ConfigFile) == "" {
+		return fmt.Errorf("ConfigFile must not be empty")
+	}
+	if strings.TrimSpace(cfg.Paths.DatabaseDir) == "" {
+		return fmt.Errorf("DatabaseDir must not be empty")
+	}
+	if strings.TrimSpace(cfg.Paths.DatabaseFile) == "" {
+		return fmt.Errorf("DatabaseFile must not be empty")
 	}
 
 	return nil

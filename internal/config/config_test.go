@@ -19,7 +19,6 @@ func clearEnv(t *testing.T) {
 		config.EnvServerDevAssets,
 		config.EnvServerPlayground,
 		config.EnvServerDataDir,
-		config.EnvServerDBPath,
 		config.EnvServerDBLogLevel,
 		config.EnvServerSecretToken,
 	}
@@ -29,60 +28,235 @@ func clearEnv(t *testing.T) {
 	}
 }
 
-func TestDefaults(t *testing.T) {
+func TestNoEnvVarDefaultsToUserHome(t *testing.T) {
 	clearEnv(t)
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
 	t.Setenv(config.EnvServerSecretToken, validSecret)
 
 	cfg, err := config.Load("")
 	if err != nil {
-		t.Fatalf("unexpected error loading defaults: %v", err)
+		t.Fatalf("unexpected load error: %v", err)
 	}
 
+	expectedDataDir := filepath.Join(tempHome, ".mobicode")
+	if cfg.Server.DataDir != expectedDataDir {
+		t.Errorf("expected Server.DataDir %q, got %q", expectedDataDir, cfg.Server.DataDir)
+	}
+
+	expectedConfigFile := filepath.Join(expectedDataDir, "config.toml")
+	if cfg.Paths.ConfigFile != expectedConfigFile {
+		t.Errorf("expected ConfigFile %q, got %q", expectedConfigFile, cfg.Paths.ConfigFile)
+	}
+
+	expectedDatabaseDir := filepath.Join(expectedDataDir, "database")
+	if cfg.Paths.DatabaseDir != expectedDatabaseDir {
+		t.Errorf("expected DatabaseDir %q, got %q", expectedDatabaseDir, cfg.Paths.DatabaseDir)
+	}
+
+	expectedDatabaseFile := filepath.Join(expectedDatabaseDir, "mobicode.db")
+	if cfg.Paths.DatabaseFile != expectedDatabaseFile {
+		t.Errorf("expected DatabaseFile %q, got %q", expectedDatabaseFile, cfg.Paths.DatabaseFile)
+	}
+	if cfg.Database.Path != expectedDatabaseFile {
+		t.Errorf("expected Database.Path %q, got %q", expectedDatabaseFile, cfg.Database.Path)
+	}
+
+	// Verify defaults
 	if cfg.Environment != config.DefaultEnvironment {
 		t.Errorf("expected default Environment %q, got %q", config.DefaultEnvironment, cfg.Environment)
 	}
 	if cfg.Server.Port != config.DefaultServerPort {
 		t.Errorf("expected default Port %d, got %d", config.DefaultServerPort, cfg.Server.Port)
 	}
-	if cfg.Server.DevAssets != false {
-		t.Errorf("expected default DevAssets false, got %v", cfg.Server.DevAssets)
-	}
-	if cfg.Server.Playground != false {
-		t.Errorf("expected default Playground false, got %v", cfg.Server.Playground)
-	}
-	expectedDataDir := filepath.Join("tmp", "database")
-	if cfg.Database.DataDir != expectedDataDir {
-		t.Errorf("expected default DataDir %q, got %q", expectedDataDir, cfg.Database.DataDir)
-	}
-	expectedDBPath := filepath.Join("tmp", "database", "mobicode.db")
-	if cfg.Database.Path != expectedDBPath {
-		t.Errorf("expected default Path %q, got %q", expectedDBPath, cfg.Database.Path)
-	}
 	if cfg.Database.LogLevel != config.DatabaseLogLevelWarn {
 		t.Errorf("expected default LogLevel %q, got %q", config.DatabaseLogLevelWarn, cfg.Database.LogLevel)
 	}
-	if cfg.Settings.SecretToken != validSecret {
-		t.Errorf("expected SecretToken %q, got %q", validSecret, cfg.Settings.SecretToken)
+
+	// Verify directories and files created in temp directory
+	if info, err := os.Stat(expectedDataDir); err != nil || !info.IsDir() {
+		t.Errorf("expected data directory to exist, err: %v", err)
+	}
+	if info, err := os.Stat(expectedDatabaseDir); err != nil || !info.IsDir() {
+		t.Errorf("expected database directory to exist, err: %v", err)
+	}
+	if info, err := os.Stat(expectedConfigFile); err != nil || info.IsDir() {
+		t.Errorf("expected config.toml to exist, err: %v", err)
 	}
 }
 
-func TestDefaultWithCustomDataDir(t *testing.T) {
+func TestServerDataDirOverridesDefault(t *testing.T) {
 	clearEnv(t)
-	t.Setenv(config.EnvServerSecretToken, validSecret)
-	customDir := filepath.Join("var", "mobicode")
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+	customDir := t.TempDir()
 	t.Setenv(config.EnvServerDataDir, customDir)
+	t.Setenv(config.EnvServerSecretToken, validSecret)
+
+	cfg, err := config.Load("")
+	if err != nil {
+		t.Fatalf("unexpected load error: %v", err)
+	}
+
+	if cfg.Server.DataDir != customDir {
+		t.Errorf("expected Server.DataDir %q, got %q", customDir, cfg.Server.DataDir)
+	}
+
+	// Ensure ~/.mobicode was NOT created
+	defaultDir := filepath.Join(tempHome, ".mobicode")
+	if _, err := os.Stat(defaultDir); !os.IsNotExist(err) {
+		t.Errorf("expected default dir %q not to exist, but it was created", defaultDir)
+	}
+}
+
+func TestAbsoluteCustomPath(t *testing.T) {
+	clearEnv(t)
+	absPath := filepath.Join(t.TempDir(), "custom_mobicode")
+	t.Setenv(config.EnvServerDataDir, absPath)
+	t.Setenv(config.EnvServerSecretToken, validSecret)
 
 	cfg, err := config.Load("")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if cfg.Database.DataDir != customDir {
-		t.Errorf("expected DataDir %q, got %q", customDir, cfg.Database.DataDir)
+	if cfg.Server.DataDir != absPath {
+		t.Errorf("expected %q, got %q", absPath, cfg.Server.DataDir)
 	}
-	expectedDBPath := filepath.Join(customDir, "mobicode.db")
-	if cfg.Database.Path != expectedDBPath {
-		t.Errorf("expected Path %q, got %q", expectedDBPath, cfg.Database.Path)
+	if !filepath.IsAbs(cfg.Server.DataDir) {
+		t.Errorf("expected absolute path, got %q", cfg.Server.DataDir)
+	}
+}
+
+func TestRelativeCustomPath(t *testing.T) {
+	clearEnv(t)
+	tempBase := t.TempDir()
+	relSubdir := filepath.Join(filepath.Base(tempBase), "data_rel")
+	relPath := filepath.Join("tmp", relSubdir)
+	t.Cleanup(func() { _ = os.RemoveAll(relPath) })
+
+	t.Setenv(config.EnvServerDataDir, relPath)
+	t.Setenv(config.EnvServerSecretToken, validSecret)
+
+	cfg, err := config.Load("")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !filepath.IsAbs(cfg.Server.DataDir) {
+		t.Errorf("expected normalized absolute path, got %q", cfg.Server.DataDir)
+	}
+	if !strings.HasSuffix(cfg.Server.DataDir, filepath.Clean(relPath)) {
+		t.Errorf("expected path to end with %q, got %q", relPath, cfg.Server.DataDir)
+	}
+	if cfg.Paths.ConfigFile != filepath.Join(cfg.Server.DataDir, "config.toml") {
+		t.Errorf("expected ConfigFile in relative dir, got %q", cfg.Paths.ConfigFile)
+	}
+}
+
+func TestDirectoryAndDatabaseDirCreation(t *testing.T) {
+	clearEnv(t)
+	nestedDir := filepath.Join(t.TempDir(), "nested", "level", "data")
+	t.Setenv(config.EnvServerDataDir, nestedDir)
+	t.Setenv(config.EnvServerSecretToken, validSecret)
+
+	cfg, err := config.Load("")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if info, err := os.Stat(cfg.Server.DataDir); err != nil || !info.IsDir() {
+		t.Errorf("expected data directory to be created, err: %v", err)
+	}
+	if info, err := os.Stat(cfg.Paths.DatabaseDir); err != nil || !info.IsDir() {
+		t.Errorf("expected database directory to be created, err: %v", err)
+	}
+}
+
+func TestEmptyConfigTomlCreation(t *testing.T) {
+	clearEnv(t)
+	customDir := t.TempDir()
+	t.Setenv(config.EnvServerDataDir, customDir)
+	t.Setenv(config.EnvServerSecretToken, validSecret)
+
+	cfg, err := config.Load("")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	data, err := os.ReadFile(cfg.Paths.ConfigFile)
+	if err != nil {
+		t.Fatalf("failed to read config.toml: %v", err)
+	}
+	if len(data) != 0 {
+		t.Errorf("expected empty config.toml, got %d bytes", len(data))
+	}
+}
+
+func TestExistingConfigTomlPreserved(t *testing.T) {
+	clearEnv(t)
+	customDir := t.TempDir()
+	configFile := filepath.Join(customDir, "config.toml")
+	expectedContent := "# custom configuration\n[custom]\nsetting = true\n"
+	if err := os.WriteFile(configFile, []byte(expectedContent), 0o644); err != nil {
+		t.Fatalf("failed to seed config.toml: %v", err)
+	}
+
+	t.Setenv(config.EnvServerDataDir, customDir)
+	t.Setenv(config.EnvServerSecretToken, validSecret)
+
+	cfg, err := config.Load("")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	data, err := os.ReadFile(cfg.Paths.ConfigFile)
+	if err != nil {
+		t.Fatalf("failed to read config.toml: %v", err)
+	}
+	if string(data) != expectedContent {
+		t.Errorf("expected existing config.toml to be preserved, got %q", string(data))
+	}
+}
+
+func TestDatabasePathDerivesFromCustomDataDirectory(t *testing.T) {
+	clearEnv(t)
+	customDir := t.TempDir()
+	t.Setenv(config.EnvServerDataDir, customDir)
+	t.Setenv(config.EnvServerSecretToken, validSecret)
+
+	cfg, err := config.Load("")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	expectedDBFile := filepath.Join(customDir, "database", "mobicode.db")
+	if cfg.Paths.DatabaseFile != expectedDBFile {
+		t.Errorf("expected DatabaseFile %q, got %q", expectedDBFile, cfg.Paths.DatabaseFile)
+	}
+	if cfg.Database.Path != expectedDBFile {
+		t.Errorf("expected Database.Path %q, got %q", expectedDBFile, cfg.Database.Path)
+	}
+}
+
+func TestInvalidUnwritableDataDirectoryReturnsError(t *testing.T) {
+	clearEnv(t)
+	tempFile := filepath.Join(t.TempDir(), "file.txt")
+	if err := os.WriteFile(tempFile, []byte("blocker"), 0o600); err != nil {
+		t.Fatalf("failed to write blocker file: %v", err)
+	}
+
+	// Pointing to a path beneath an existing file cannot be created with os.MkdirAll
+	unwritableDir := filepath.Join(tempFile, "sub_directory")
+	t.Setenv(config.EnvServerDataDir, unwritableDir)
+	t.Setenv(config.EnvServerSecretToken, validSecret)
+
+	_, err := config.Load("")
+	if err == nil {
+		t.Fatal("expected error for unwritable data directory, got nil")
+	}
+	if !strings.Contains(err.Error(), "create mobicode data directory") {
+		t.Errorf("expected error containing 'create mobicode data directory', got %v", err)
 	}
 }
 
@@ -184,22 +358,12 @@ func TestParsing(t *testing.T) {
 				}
 			},
 		},
-		{
-			name: "explicit database path",
-			env: map[string]string{
-				config.EnvServerDBPath: "/custom/path/app.db",
-			},
-			assertFn: func(t *testing.T, cfg *config.Config) {
-				if cfg.Database.Path != "/custom/path/app.db" {
-					t.Errorf("expected /custom/path/app.db, got %s", cfg.Database.Path)
-				}
-			},
-		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			clearEnv(t)
+			t.Setenv("HOME", t.TempDir())
 			t.Setenv(config.EnvServerSecretToken, validSecret)
 			for k, v := range tt.env {
 				t.Setenv(k, v)
@@ -295,6 +459,7 @@ func TestValidation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			clearEnv(t)
+			t.Setenv("HOME", t.TempDir())
 			t.Setenv(config.EnvServerSecretToken, validSecret)
 			for k, v := range tt.env {
 				t.Setenv(k, v)
@@ -311,23 +476,29 @@ func TestValidation(t *testing.T) {
 	}
 }
 
-func TestValidateEmptyDatabasePath(t *testing.T) {
+func TestValidateEmptyDataDir(t *testing.T) {
 	cfg := &config.Config{
 		Environment: "development",
-		Server:      config.ServerConfig{Port: 8080},
-		Database:    config.DatabaseConfig{Path: "", LogLevel: config.DatabaseLogLevelWarn},
-		Settings:    config.SettingsConfig{SecretToken: validSecret},
+		Server:      config.ServerConfig{Port: 8080, DataDir: ""},
+		Database:    config.DatabaseConfig{LogLevel: config.DatabaseLogLevelWarn},
+		Paths: config.PathsConfig{
+			ConfigFile:   "/path/config.toml",
+			DatabaseDir:  "/path/database",
+			DatabaseFile: "/path/database/mobicode.db",
+		},
+		Settings: config.SettingsConfig{SecretToken: validSecret},
 	}
 	err := config.Validate(cfg)
-	if err == nil || !strings.Contains(err.Error(), "MOBICODE_SERVER_DB_PATH must not be empty") {
-		t.Errorf("expected error for empty database path, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "MOBICODE_SERVER_DATA_DIR must not be empty") {
+		t.Errorf("expected error for empty DataDir, got %v", err)
 	}
 }
 
 func TestEnvironmentPrecedence(t *testing.T) {
 	clearEnv(t)
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
 
-	// Create a temp .env file with defaults from file
 	tempDir := t.TempDir()
 	envPath := filepath.Join(tempDir, ".env")
 	envContent := `MOBICODE_SERVER_ENV=production
@@ -339,7 +510,6 @@ MOBICODE_SERVER_SECRET_TOKEN=file-secret-token-with-at-least-32-bytes
 		t.Fatalf("failed to write temp .env: %v", err)
 	}
 
-	// Override specific variables explicitly in the environment
 	t.Setenv(config.EnvServerPort, "9999")
 	t.Setenv(config.EnvServerDBLogLevel, "info")
 
@@ -348,15 +518,12 @@ MOBICODE_SERVER_SECRET_TOKEN=file-secret-token-with-at-least-32-bytes
 		t.Fatalf("failed to load config with temp .env: %v", err)
 	}
 
-	// Port and LogLevel should take the explicit process env values
 	if cfg.Server.Port != 9999 {
 		t.Errorf("expected process env Port 9999 to take precedence, got %d", cfg.Server.Port)
 	}
 	if cfg.Database.LogLevel != config.DatabaseLogLevelInfo {
 		t.Errorf("expected process env LogLevel info to take precedence, got %s", cfg.Database.LogLevel)
 	}
-
-	// Environment and SecretToken should be populated from the .env file since process env wasn't set
 	if cfg.Environment != "production" {
 		t.Errorf("expected Environment 'production' from file, got %s", cfg.Environment)
 	}
