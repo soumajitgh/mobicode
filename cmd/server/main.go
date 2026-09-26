@@ -17,8 +17,8 @@ import (
 	"gorm.io/gorm/logger"
 
 	"github.com/soumajitgh/mobicode/internal/app"
-	applogger "github.com/soumajitgh/mobicode/internal/logger"
 	"github.com/soumajitgh/mobicode/internal/store"
+	apputils "github.com/soumajitgh/mobicode/internal/utils"
 )
 
 func main() {
@@ -30,7 +30,7 @@ func start() int {
 		fmt.Fprintf(os.Stderr, "load .env: %v\n", err)
 		return 1
 	}
-	log, err := applogger.New(os.Getenv("MOBICODE_SERVER_ENV"))
+	log, err := apputils.New(os.Getenv("MOBICODE_SERVER_ENV"))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1

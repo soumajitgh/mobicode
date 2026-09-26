@@ -3,6 +3,7 @@ package middleware
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -44,5 +45,26 @@ func TestLoggingRecordsRequestCompletion(t *testing.T) {
 	}
 	if len(fields) != 5 {
 		t.Fatalf("unexpected fields: %v", fields)
+	}
+}
+
+func TestDevelopmentLoggingIsCompact(t *testing.T) {
+	core, recorded := observer.New(zapcore.InfoLevel)
+	router := chi.NewRouter()
+	Apply(router, zap.New(core), true)
+	router.Get("/resource", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusCreated) })
+	router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/resource?token=secret", nil))
+	if recorded.Len() != 1 {
+		t.Fatalf("log entries = %d, want 1", recorded.Len())
+	}
+	entry := recorded.All()[0]
+	if !strings.HasPrefix(entry.Message, "GET /resource  201  ") {
+		t.Fatalf("unexpected development log: %q", entry.Message)
+	}
+	if len(entry.ContextMap()) != 0 {
+		t.Fatalf("development log should be compact: %v", entry.ContextMap())
+	}
+	if strings.Contains(entry.Message, "secret") {
+		t.Fatal("query string leaked into log")
 	}
 }
