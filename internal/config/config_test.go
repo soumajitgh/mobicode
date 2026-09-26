@@ -219,6 +219,26 @@ func TestExistingConfigTomlPreserved(t *testing.T) {
 	}
 }
 
+func TestMalformedConfigTomlReturnsError(t *testing.T) {
+	clearEnv(t)
+	customDir := t.TempDir()
+	configFile := filepath.Join(customDir, "config.toml")
+	if err := os.WriteFile(configFile, []byte("invalid = ["), 0o644); err != nil {
+		t.Fatalf("failed to seed malformed config.toml: %v", err)
+	}
+
+	t.Setenv(config.EnvServerDataDir, customDir)
+	t.Setenv(config.EnvServerSecretToken, validSecret)
+
+	_, err := config.Load("")
+	if err == nil {
+		t.Fatal("expected error for malformed config.toml, got nil")
+	}
+	if !strings.Contains(err.Error(), "parse config file") {
+		t.Errorf("expected error containing 'parse config file', got %v", err)
+	}
+}
+
 func TestDatabasePathDerivesFromCustomDataDirectory(t *testing.T) {
 	clearEnv(t)
 	customDir := t.TempDir()

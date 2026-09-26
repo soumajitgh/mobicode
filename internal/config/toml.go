@@ -6,7 +6,14 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/pelletier/go-toml/v2"
 )
+
+// tomlConfig represents the parsed configuration from config.toml.
+type tomlConfig struct {
+	// Reserved for future TOML configuration settings.
+}
 
 // resolveDataDir determines the Mobicode data directory from environment or user home.
 func resolveDataDir() (string, error) {
@@ -45,7 +52,7 @@ func initDirectories(dataDir string) (string, error) {
 	return dbDir, nil
 }
 
-// ensureConfigFile creates config.toml if missing and loads it.
+// ensureConfigFile creates config.toml on boot if not present and parses it using go-toml/v2.
 func ensureConfigFile(dataDir string) (string, error) {
 	configFile := filepath.Join(dataDir, DefaultConfigName)
 
@@ -56,8 +63,14 @@ func ensureConfigFile(dataDir string) (string, error) {
 		return "", fmt.Errorf("create config file: %w", err)
 	}
 
-	if _, err := os.ReadFile(configFile); err != nil {
+	data, err := os.ReadFile(configFile)
+	if err != nil {
 		return "", fmt.Errorf("load config file: %w", err)
+	}
+
+	var parsed tomlConfig
+	if err := toml.Unmarshal(data, &parsed); err != nil {
+		return "", fmt.Errorf("parse config file: %w", err)
 	}
 
 	return configFile, nil
