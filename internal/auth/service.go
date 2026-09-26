@@ -2,19 +2,13 @@ package auth
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/subtle"
-	"encoding/base64"
 	"errors"
-	"fmt"
-	"net/mail"
-	"strings"
 
-	"golang.org/x/crypto/argon2"
 	"gorm.io/gorm"
 
 	"github.com/soumajitgh/mobicode/internal/store/model"
 	"github.com/soumajitgh/mobicode/internal/store/repository"
+	"github.com/soumajitgh/mobicode/internal/utils"
 )
 
 var (
@@ -29,45 +23,12 @@ type Service struct {
 	RecoveryToken string
 }
 
-func NormalizeEmail(email string) string { return strings.ToLower(strings.TrimSpace(email)) }
-func validEmail(email string) bool {
-	addr, err := mail.ParseAddress(email)
-	return err == nil && addr.Address == email && len(email) <= 254
-}
-func validPassword(password string) bool { return len(password) >= 12 && len(password) <= 128 }
-func Hash(password string) (string, error) {
-	salt := make([]byte, 16)
-	if _, err := rand.Read(salt); err != nil {
-		return "", err
-	}
-	hash := argon2.IDKey([]byte(password), salt, 3, 64*1024, 4, 32)
-	return fmt.Sprintf("$argon2id$v=19$m=65536,t=3,p=4$%s$%s", base64.RawStdEncoding.EncodeToString(salt), base64.RawStdEncoding.EncodeToString(hash)), nil
-}
-
-func Verify(password, encoded string) bool {
-	parts := strings.Split(encoded, "$")
-	if len(parts) != 6 || parts[1] != "argon2id" || parts[2] != "v=19" || parts[3] != "m=65536,t=3,p=4" {
-		return false
-	}
-	salt, err1 := base64.RawStdEncoding.DecodeString(parts[4])
-	hash, err2 := base64.RawStdEncoding.DecodeString(parts[5])
-	if err1 != nil || err2 != nil || len(salt) != 16 || len(hash) != 32 {
-		return false
-	}
-	calculated := argon2.IDKey([]byte(password), salt, 3, 64*1024, 4, 32)
-	return subtle.ConstantTimeCompare(hash, calculated) == 1
-}
-
-func (s *Service) recoveryValid(token string) bool {
-	return s.RecoveryToken != "" && subtle.ConstantTimeCompare([]byte(token), []byte(s.RecoveryToken)) == 1
-}
-
 func (s *Service) Register(ctx context.Context, email, password, token string) (*model.User, error) {
-	if !s.recoveryValid(token) {
+	if !utils.ValidRecoveryToken(token, s.RecoveryToken) {
 		return nil, ErrInvalidRecoveryToken
 	}
-	email = NormalizeEmail(email)
-	if !validEmail(email) || !validPassword(password) {
+	email = utils.NormalizeEmail(email)
+	if !utils.ValidEmail(email) || !utils.ValidPassword(password) {
 		return nil, ErrInvalidInput
 	}
 	hash, err := Hash(password)
@@ -85,8 +46,8 @@ func (s *Service) Register(ctx context.Context, email, password, token string) (
 }
 
 func (s *Service) Login(ctx context.Context, email, password string) (*model.User, error) {
-	email = NormalizeEmail(email)
-	if !validEmail(email) {
+	email = utils.NormalizeEmail(email)
+	if !utils.ValidEmail(email) {
 		return nil, ErrInvalidCredentials
 	}
 	user, err := s.Users.FindByEmail(ctx, email)
@@ -103,11 +64,11 @@ func (s *Service) Login(ctx context.Context, email, password string) (*model.Use
 }
 
 func (s *Service) ResetPassword(ctx context.Context, email, password, token string) error {
-	if !s.recoveryValid(token) {
+	if !utils.ValidRecoveryToken(token, s.RecoveryToken) {
 		return ErrInvalidRecoveryToken
 	}
-	email = NormalizeEmail(email)
-	if !validEmail(email) || !validPassword(password) {
+	email = utils.NormalizeEmail(email)
+	if !utils.ValidEmail(email) || !utils.ValidPassword(password) {
 		return ErrInvalidInput
 	}
 	user, err := s.Users.FindByEmail(ctx, email)
