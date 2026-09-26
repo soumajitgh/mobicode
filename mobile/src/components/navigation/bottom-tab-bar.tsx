@@ -20,7 +20,10 @@ export function BottomTabBar({
   return (
     <HStack
       className="border-t border-border bg-card"
-      style={{ paddingBottom: bottom }}
+      style={{
+        paddingTop: theme.spacing.xs,
+        paddingBottom: bottom + theme.spacing.xs,
+      }}
     >
       {state.routes.map((route, index) => {
         const active = state.index === index;
