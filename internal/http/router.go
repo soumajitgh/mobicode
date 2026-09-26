@@ -3,7 +3,6 @@ package http
 import (
 	"net"
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/99designs/gqlgen/graphql/playground"
@@ -19,9 +18,13 @@ import (
 )
 
 // NewRouter builds the server's HTTP handler.
-func NewRouter(resolver *appgraphql.Resolver, webHandler *webhandlers.Handler, enablePlayground, devAssets bool, log *zap.Logger, browserAuth *webhandlers.Auth, onboarding *webhandlers.Onboarding) *chi.Mux {
+func NewRouter(resolver *appgraphql.Resolver, webHandler *webhandlers.Handler, enablePlayground, devAssets bool, log *zap.Logger, browserAuth *webhandlers.Auth, onboarding *webhandlers.Onboarding, isDevelopment ...bool) *chi.Mux {
 	r := chi.NewRouter()
-	middleware.Apply(r, log, os.Getenv("MOBICODE_SERVER_ENV") != "production")
+	dev := true
+	if len(isDevelopment) > 0 {
+		dev = isDevelopment[0]
+	}
+	middleware.Apply(r, log, dev)
 	r.Use(browserAuth.Sessions.LoadAndSave)
 	r.Use(webmiddleware.GateOnboarding(onboarding))
 	r.Get("/healthz", handler.Health)

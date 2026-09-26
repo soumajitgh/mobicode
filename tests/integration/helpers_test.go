@@ -13,9 +13,9 @@ import (
 	"testing"
 
 	"go.uber.org/zap"
-	"gorm.io/gorm/logger"
 
 	"github.com/soumajitgh/mobicode/internal/app"
+	"github.com/soumajitgh/mobicode/internal/config"
 	"github.com/soumajitgh/mobicode/internal/store"
 )
 
@@ -34,12 +34,23 @@ type testApplication struct {
 
 func newTestApplication(t *testing.T) *testApplication {
 	t.Helper()
-	t.Setenv("MOBICODE_SERVER_ENV", "development")
-	t.Setenv("MOBICODE_SERVER_SECRET_TOKEN", testRecoveryToken)
+	cfg := &config.Config{
+		Environment: "development",
+		Server: config.ServerConfig{
+			Port: 8080,
+		},
+		Database: config.DatabaseConfig{
+			Path:     filepath.Join(t.TempDir(), "application.db"),
+			LogLevel: config.DatabaseLogLevelSilent,
+		},
+		Settings: config.SettingsConfig{
+			SecretToken: testRecoveryToken,
+		},
+	}
 
 	persistence, err := store.Open(context.Background(), store.Config{
-		SQLitePath:   filepath.Join(t.TempDir(), "application.db"),
-		GORMLogLevel: logger.Silent,
+		SQLitePath: cfg.Database.Path,
+		LogLevel:   cfg.Database.LogLevel,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -59,7 +70,7 @@ func newTestApplication(t *testing.T) *testApplication {
 		store: persistence,
 		client: &http.Client{
 			Jar:           jar,
-			Transport:     handlerTransport{handler: app.New(persistence, zap.NewNop())},
+			Transport:     handlerTransport{handler: app.New(cfg, persistence, zap.NewNop())},
 			CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse },
 		},
 	}
