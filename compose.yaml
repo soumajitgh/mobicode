@@ -7,15 +7,10 @@ services:
     environment:
       MOBICODE_SERVER_PORT: "8080"
       MOBICODE_SERVER_DEV_ASSETS: "true"
-    command:
-      - sh
-      - -c
-      - |
-        go tool shadcn-templ bundle --watch &
-        exec go tool templ generate -path internal/web -watch \
-          -cmd='make -C ../.. server/serve WEB_PORT=8080' -open-browser=false
+    command: go tool air -c .air.toml
     ports:
       - "${MOBICODE_SERVER_PORT:-8080}:8080"
+      - "${MOBICODE_RELOAD_PORT:-7331}:7331"
     volumes:
       - .:/workspace
       - mobicode_db:/workspace/db

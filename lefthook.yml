@@ -1,0 +1,4 @@
+commit-msg:
+  jobs:
+    - name: conventional-commit
+      run: sh scripts/check-commit-msg.sh {1}

@@ -24,7 +24,7 @@ From the repository root:
 
 ```bash
 cp .env.example .env
-make server/install
+pnpm install --frozen-lockfile
 make server/dev
 ```
 
@@ -36,7 +36,7 @@ Send GraphQL queries as JSON to `POST /mobile/graphql`. For example:
 {"query":"{ health { status } }"}
 ```
 
-Set `MOBICODE_SERVER_PLAYGROUND=true` to enable the playground at `/mobile/graphql/playground` for localhost clients. To add a GraphQL field, edit a feature schema in `internal/graphql/schema`, run `make server/gql`, and implement the generated resolver. Application services are assembled in `internal/app` and injected into the resolver.
+Set `MOBICODE_SERVER_PLAYGROUND=true` to enable the playground at `/mobile/graphql/playground` for localhost clients. To add a GraphQL field, edit a feature schema in `internal/graphql/schema`, run `go tool gqlgen generate`, and implement the generated resolver. Application services are assembled in `internal/app` and injected into the resolver.
 
 ## Run the mobile app
 

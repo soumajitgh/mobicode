@@ -32,7 +32,12 @@ printf 'Downloading Go dependencies...\n'
 "$go_cmd" mod download
 
 printf 'Installing root web dependencies...\n'
-"$make_cmd" server/install GO="$go_cmd" PNPM="$pnpm_cmd"
+"$pnpm_cmd" install --frozen-lockfile
+
+if git rev-parse --git-dir >/dev/null 2>&1; then
+	printf 'Installing commit message hook...\n'
+	"$pnpm_cmd" exec lefthook install
+fi
 
 printf 'Installing mobile dependencies...\n'
 "$make_cmd" mobile/install GO="$go_cmd" PNPM="$pnpm_cmd"
@@ -40,7 +45,7 @@ printf 'Installing mobile dependencies...\n'
 printf 'Installing website dependencies...\n'
 "$make_cmd" website/install GO="$go_cmd" PNPM="$pnpm_cmd"
 
-printf 'Building browser assets...\n'
-"$make_cmd" server/assets GO="$go_cmd" PNPM="$pnpm_cmd"
+printf 'Building server and browser assets...\n'
+"$make_cmd" server/build GO="$go_cmd" PNPM="$pnpm_cmd"
 
 printf 'Setup complete. Run make server/dev, make mobile/start, or make website/start.\n'

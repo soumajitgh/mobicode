@@ -1,0 +1,23 @@
+root = "."
+tmp_dir = "tmp"
+
+[build]
+cmd = "go tool templ generate -path internal/web && go tool shadcn-templ bundle && go build -o ./bin/mobicode-server ./cmd/server"
+entrypoint = ["./bin/mobicode-server"]
+delay = 1000
+include_ext = ["go", "templ", "css"]
+exclude_dir = [".git", ".pnpm-store", "bin", "db", "mobile", "node_modules", "public", "tmp", "website"]
+exclude_regex = ["_templ\\.go$", "scripts_bundle\\.go$"]
+poll = true
+poll_interval = 1000
+send_interrupt = true
+kill_delay = "1s"
+stop_on_error = true
+
+[proxy]
+enabled = true
+proxy_port = 7331
+app_port = 8080
+
+[misc]
+clean_on_exit = true
