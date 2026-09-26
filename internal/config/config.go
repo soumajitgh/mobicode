@@ -23,17 +23,17 @@ const (
 
 // Config holds the validated application configuration.
 type Config struct {
-	Environment string
-	Server      ServerConfig
-	Database    DatabaseConfig
-	Settings    SettingsConfig
-	Paths       PathsConfig
+	Environment string         `validate:"required,oneof=development production"`
+	Server      ServerConfig   `validate:"required"`
+	Database    DatabaseConfig `validate:"required"`
+	Settings    SettingsConfig `validate:"required"`
+	Paths       PathsConfig    `validate:"required"`
 }
 
 // ServerConfig holds HTTP server configuration.
 type ServerConfig struct {
-	Port       int
-	DataDir    string
+	Port       int    `validate:"required,min=1,max=65535"`
+	DataDir    string `validate:"required,notblank"`
 	DevAssets  bool
 	Playground bool
 }
@@ -41,19 +41,19 @@ type ServerConfig struct {
 // DatabaseConfig holds database connection configuration.
 type DatabaseConfig struct {
 	Path     string
-	LogLevel DatabaseLogLevel
+	LogLevel DatabaseLogLevel `validate:"required,oneof=silent error warn info"`
 }
 
 // SettingsConfig holds application-wide settings.
 type SettingsConfig struct {
-	SecretToken string
+	SecretToken string `validate:"required,min=32,notplaceholder,notrepeated"`
 }
 
 // PathsConfig holds fully resolved file and directory paths.
 type PathsConfig struct {
-	ConfigFile   string
-	DatabaseDir  string
-	DatabaseFile string
+	ConfigFile   string `validate:"required,notblank"`
+	DatabaseDir  string `validate:"required,notblank"`
+	DatabaseFile string `validate:"required,notblank"`
 }
 
 // Load loads configuration following the prescribed initialization sequence.

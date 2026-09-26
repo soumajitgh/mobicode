@@ -6,11 +6,20 @@ import (
 
 	"github.com/a-h/templ"
 	zxcvbn "github.com/boomhut/zxcvbn-go"
+	"github.com/go-playground/validator/v10"
 
 	"github.com/soumajitgh/mobicode/internal/auth"
 	"github.com/soumajitgh/mobicode/internal/utils"
 	"github.com/soumajitgh/mobicode/internal/web/pages"
 )
+
+var formValidate = validator.New()
+
+type initialUserForm struct {
+	Email           string `validate:"required,email,max=254"`
+	Password        string `validate:"required,min=12,max=128"`
+	ConfirmPassword string `validate:"required,eqfield=Password"`
+}
 
 func (o *Onboarding) Get(w http.ResponseWriter, r *http.Request) {
 	hasUsers, err := o.HasUsers(r.Context())
@@ -86,21 +95,44 @@ func (o *Onboarding) SubmitUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	email := r.PostFormValue("email")
+	rawEmail := r.PostFormValue("email")
 	password := r.PostFormValue("password")
-	if password != r.PostFormValue("confirm_password") {
-		o.renderUserForm(w, r, email, "Passwords do not match")
+	confirmPassword := r.PostFormValue("confirm_password")
+
+	form := initialUserForm{
+		Email:           utils.NormalizeEmail(rawEmail),
+		Password:        password,
+		ConfirmPassword: confirmPassword,
+	}
+
+	if err := formValidate.Struct(&form); err != nil {
+		var valErrs validator.ValidationErrors
+		if errors.As(err, &valErrs) {
+			for _, fe := range valErrs {
+				if fe.Field() == "ConfirmPassword" {
+					o.renderUserForm(w, r, rawEmail, "Passwords do not match")
+					return
+				}
+			}
+			for _, fe := range valErrs {
+				switch fe.Field() {
+				case "Email":
+					o.renderUserForm(w, r, rawEmail, "Please enter a valid email address")
+					return
+				case "Password":
+					o.renderUserForm(w, r, rawEmail, "Password must be at least 12 characters long")
+					return
+				}
+			}
+		}
+		o.renderUserForm(w, r, rawEmail, "Invalid input")
 		return
 	}
 
-	user, err := o.Auth.Service.CreateInitialUser(r.Context(), email, password)
+	user, err := o.Auth.Service.CreateInitialUser(r.Context(), form.Email, form.Password)
 	if err != nil {
 		message := "Invalid input"
-		if !utils.ValidEmail(utils.NormalizeEmail(email)) {
-			message = "Please enter a valid email address"
-		} else if !utils.ValidPassword(password) {
-			message = "Password must be at least 12 characters long"
-		} else if errors.Is(err, auth.ErrDuplicateEmail) {
+		if errors.Is(err, auth.ErrDuplicateEmail) {
 			message = "Email already registered"
 		} else if errors.Is(err, auth.ErrInitialUserAlreadyExists) {
 			o.Sessions.Put(r.Context(), "onboarding_in_progress", true)
@@ -108,7 +140,7 @@ func (o *Onboarding) SubmitUser(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		o.renderUserForm(w, r, email, message)
+		o.renderUserForm(w, r, rawEmail, message)
 		return
 	}
 
@@ -142,7 +174,7 @@ func (o *Onboarding) PasswordStrength(w http.ResponseWriter, r *http.Request) {
 	}
 
 	password := r.PostFormValue("password")
-	if len(password) > 128 {
+	if err := formValidate.Var(password, "max=128"); err != nil {
 		http.Error(w, "password too long", http.StatusBadRequest)
 		return
 	}
