@@ -26,6 +26,7 @@ type Config struct {
 	Environment string         `validate:"required,oneof=development production"`
 	Server      ServerConfig   `validate:"required"`
 	Database    DatabaseConfig `validate:"required"`
+	Development DevelopmentConfig
 	Settings    SettingsConfig `validate:"required"`
 	Paths       PathsConfig    `validate:"required"`
 }
@@ -38,6 +39,11 @@ type ServerConfig struct {
 	Playground      bool
 	BaseURL         string
 	ResolvedBaseURL string
+}
+
+// DevelopmentConfig holds opt-in features for trusted local development.
+type DevelopmentConfig struct {
+	MobileAutoPair bool
 }
 
 // DatabaseConfig holds database connection configuration.
@@ -144,6 +150,13 @@ func Load(filenames ...string) (*Config, error) {
 	if playgroundStr := strings.TrimSpace(os.Getenv(EnvServerPlayground)); playgroundStr != "" {
 		if val, err := strconv.ParseBool(playgroundStr); err == nil {
 			cfg.Server.Playground = val
+		}
+	}
+	if cfg.Environment == "development" {
+		if autoPairStr := strings.TrimSpace(os.Getenv(EnvMobileAutoPair)); autoPairStr != "" {
+			if val, err := strconv.ParseBool(autoPairStr); err == nil {
+				cfg.Development.MobileAutoPair = val
+			}
 		}
 	}
 

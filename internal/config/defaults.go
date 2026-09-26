@@ -25,4 +25,5 @@ const (
 	EnvServerDevAssets   = "MOBICODE_SERVER_DEV_ASSETS"
 	EnvServerPlayground  = "MOBICODE_SERVER_PLAYGROUND"
 	EnvServerBaseURL     = "MOBICODE_SERVER_BASE_URL"
+	EnvMobileAutoPair    = "MOBICODE_MOBILE_AUTO_PAIR"
 )

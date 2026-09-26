@@ -49,21 +49,38 @@ func (s *Service) Create(ctx context.Context, userID uint) (*Pairing, error) {
 	if s.BaseURL == "" {
 		return nil, ErrAddressUnavailable
 	}
-	id, err := randomToken(16)
+	id, token, expires, err := s.create(ctx, userID)
 	if err != nil {
-		return nil, err
-	}
-	token, err := randomToken(32)
-	if err != nil {
-		return nil, err
-	}
-	now := s.now()
-	expires := now.Add(config.PairingLifetime)
-	if err := s.Repository.CreatePairing(ctx, id, userID, HashToken(token), now, expires); err != nil {
 		return nil, err
 	}
 	q := url.Values{"server": {s.BaseURL}, "token": {token}}
 	return &Pairing{ID: id, QRPayload: "mobicode://pair?" + q.Encode(), ExpiresAt: expires}, nil
+}
+
+// AutoPair issues the same device and session as a claimed pairing without a QR address.
+func (s *Service) AutoPair(ctx context.Context, userID uint, name, platform string) (*Session, error) {
+	_, token, _, err := s.create(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return s.Claim(ctx, token, name, platform)
+}
+
+func (s *Service) create(ctx context.Context, userID uint) (string, string, time.Time, error) {
+	id, err := randomToken(16)
+	if err != nil {
+		return "", "", time.Time{}, err
+	}
+	token, err := randomToken(32)
+	if err != nil {
+		return "", "", time.Time{}, err
+	}
+	now := s.now()
+	expires := now.Add(config.PairingLifetime)
+	if err := s.Repository.CreatePairing(ctx, id, userID, HashToken(token), now, expires); err != nil {
+		return "", "", time.Time{}, err
+	}
+	return id, token, expires, nil
 }
 
 func (s *Service) Claim(ctx context.Context, token, name, platform string) (*Session, error) {

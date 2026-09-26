@@ -20,7 +20,7 @@ import (
 )
 
 // NewRouter builds the server's HTTP handler.
-func NewRouter(resolver *resolver.Resolver, mobile repository.MobileRepository, webHandler *webhandlers.Handler, enablePlayground, devAssets bool, log *zap.Logger, browserAuth *webhandlers.Auth, onboarding *webhandlers.Onboarding) *chi.Mux {
+func NewRouter(resolver *resolver.Resolver, mobile repository.MobileRepository, webHandler *webhandlers.Handler, enablePlayground, devAssets bool, log *zap.Logger, browserAuth *webhandlers.Auth, onboarding *webhandlers.Onboarding, devAutoPair http.Handler) *chi.Mux {
 	r := chi.NewRouter()
 	middleware.Apply(r, log)
 	r.Use(browserAuth.Sessions.LoadAndSave)
@@ -30,6 +30,9 @@ func NewRouter(resolver *resolver.Resolver, mobile repository.MobileRepository, 
 
 	r.Route("/mobile", func(r chi.Router) {
 		r.Use(graphqlmiddleware.Authenticate(browserAuth.Sessions, browserAuth.Users, mobile))
+		if devAutoPair != nil {
+			r.Method(http.MethodPost, "/dev/auto-pair", devAutoPair)
+		}
 		graphqlHandler := newGraphQLHandler(resolver)
 		r.Method(http.MethodPost, "/graphql", graphqlHandler)
 		r.Method(http.MethodOptions, "/graphql", graphqlHandler)

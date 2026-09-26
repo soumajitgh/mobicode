@@ -12,6 +12,7 @@ import (
 	"github.com/soumajitgh/mobicode/internal/graphql/resolver"
 	"github.com/soumajitgh/mobicode/internal/health"
 	apphttp "github.com/soumajitgh/mobicode/internal/http"
+	"github.com/soumajitgh/mobicode/internal/http/handler"
 	"github.com/soumajitgh/mobicode/internal/pairing"
 	"github.com/soumajitgh/mobicode/internal/store"
 	"github.com/soumajitgh/mobicode/internal/web/handlers"
@@ -20,7 +21,12 @@ import (
 // New assembles dependencies for the HTTP application.
 func New(cfg *config.Config, persistence *store.Store, log *zap.Logger) http.Handler {
 	healthService := &health.Service{}
-	graphqlResolver := &resolver.Resolver{Pairing: &pairing.Service{Repository: persistence.Mobile, BaseURL: cfg.Server.ResolvedBaseURL}}
+	pairingService := &pairing.Service{Repository: persistence.Mobile, BaseURL: cfg.Server.ResolvedBaseURL}
+	graphqlResolver := &resolver.Resolver{Pairing: pairingService}
+	var devAutoPair http.Handler
+	if cfg.Environment == "development" && cfg.Development.MobileAutoPair {
+		devAutoPair = handler.DevAutoPair(persistence.Users, pairingService)
+	}
 	sessions := scs.New()
 	sessions.Store = persistence.Sessions
 	sessions.Lifetime = 24 * time.Hour
@@ -41,5 +47,6 @@ func New(cfg *config.Config, persistence *store.Store, log *zap.Logger) http.Han
 		log,
 		browserAuth,
 		onboarding,
+		devAutoPair,
 	)
 }

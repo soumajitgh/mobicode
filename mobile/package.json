@@ -10,6 +10,7 @@
     "@legendapp/motion": "^2.5.3",
     "babel-preset-expo": "~57.0.0",
     "expo": "~57.0.25",
+    "expo-secure-store": "~57.0.4",
     "expo-status-bar": "~57.0.1",
     "nativewind": "^5.0.0-preview.2",
     "react": "19.2.3",

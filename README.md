@@ -31,6 +31,7 @@ Run `make help` to see the daily development commands. The most common are:
 - Browser app: run `make server/dev` after initialization; open `http://localhost:8080/`
 - Browser development: use `make server/dev` and open `http://localhost:7331/` for automatic reloads
 - Mobile: `make mobile/start` (or `make mobile/android`, `make mobile/ios`, `make mobile/web`)
+- Mobile development auto pairing: set `MOBICODE_MOBILE_AUTO_PAIR=true` in the server `.env` while `MOBICODE_SERVER_ENV=development`. Copy `mobile/.env.example` to `mobile/.env` and set `EXPO_PUBLIC_MOBICODE_SERVER_URL` to the server address reachable from your phone or simulator (use your computer's LAN IP for a physical phone). Start the server, build the native app with `pnpm exec expo run:ios` or `pnpm exec expo run:android` from `mobile`, then open it. If the database contains an account, the app pairs with the oldest account and securely saves its session. Existing valid sessions are reused. The flag defaults to off, and the endpoint is absent in production. Enable it only on a trusted local network: any client that can reach the enabled endpoint can obtain a session for that account.
 - Website: `make website/start`
 
 ## Go formatting and linting

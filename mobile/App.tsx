@@ -1,18 +1,32 @@
 import { StatusBar } from 'expo-status-bar';
+import { useEffect, useState } from 'react';
 import { Linking, StyleSheet, Text, View } from 'react-native';
 
 import { GluestackUIProvider } from '@/components/ui/gluestack-ui-provider';
 import { Button, ButtonText } from '@/components/ui/button';
 import '@/global.css';
+import { PairedUser, restoreOrAutoPair } from './session';
 
 export default function App() {
+  const [user, setUser] = useState<PairedUser | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    void restoreOrAutoPair().then((paired) => {
+      if (mounted) setUser(paired);
+    }).catch(() => {
+      // The starter screen remains available when development pairing fails.
+    });
+    return () => { mounted = false; };
+  }, []);
+
   return (
     <GluestackUIProvider mode="light">
       <View style={styles.container}>
         <Text style={styles.eyebrow}>MOBICODE</Text>
-        <Text style={styles.title}>Code from anywhere.</Text>
+        <Text style={styles.title}>{user ? 'Device paired.' : 'Code from anywhere.'}</Text>
         <Text style={styles.description}>
-          A mobile first coding agent for on the go development.
+          {user ? `Signed in as ${user.email}` : 'A mobile first coding agent for on the go development.'}
         </Text>
         <Button onPress={() => void Linking.openURL('https://soumajitgh.github.io/mobicode/')}>
           <ButtonText>Read the docs</ButtonText>
