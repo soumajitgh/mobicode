@@ -7,20 +7,22 @@ import (
 
 	"github.com/99designs/gqlgen/graphql/playground"
 	"github.com/go-chi/chi/v5"
+	"go.uber.org/zap"
+
 	appgraphql "github.com/soumajitgh/mobicode/internal/graphql"
 	"github.com/soumajitgh/mobicode/internal/http/handler"
 	"github.com/soumajitgh/mobicode/internal/http/middleware"
 	"github.com/soumajitgh/mobicode/internal/web"
 	webhandlers "github.com/soumajitgh/mobicode/internal/web/handlers"
-	"go.uber.org/zap"
 )
 
 // NewRouter builds the server's HTTP handler.
-func NewRouter(resolver *appgraphql.Resolver, webHandler *webhandlers.Handler, enablePlayground, devAssets bool, log *zap.Logger) *chi.Mux {
+func NewRouter(resolver *appgraphql.Resolver, webHandler *webhandlers.Handler, enablePlayground, devAssets bool, log *zap.Logger, browserAuth *web.Auth) *chi.Mux {
 	r := chi.NewRouter()
 	middleware.Apply(r, log)
+	r.Use(browserAuth.Sessions.LoadAndSave)
 	r.Get("/healthz", handler.Health)
-	web.RegisterRoutes(r, webHandler, devAssets)
+	web.RegisterRoutes(r, webHandler, devAssets, browserAuth)
 
 	r.Route("/mobile", func(r chi.Router) {
 		graphqlHandler := newGraphQLHandler(resolver)

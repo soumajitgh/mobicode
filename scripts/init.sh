@@ -22,6 +22,9 @@ fi
 
 if [ ! -f .env ]; then
 	cp .env.example .env
+	secret=$(openssl rand -hex 32)
+	sed -i.bak "s/^MOBICODE_SERVER_SECRET_TOKEN=.*/MOBICODE_SERVER_SECRET_TOKEN=$secret/" .env
+	rm .env.bak
 	printf 'Created .env from .env.example\n'
 fi
 

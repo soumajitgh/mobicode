@@ -1,0 +1,23 @@
+package pages
+
+templ AuthForm(title, action, next, csrf, message string, recovery bool) {
+ @Layout(title + " · MobiCode") {
+  <main class="mx-auto max-w-md px-6 py-16">
+   <h1 class="text-3xl font-bold">{ title }</h1>
+   if message != "" {
+    <p role="alert" class="mt-4 text-red-400">{ message }</p>
+   }
+   <form method="post" action={ action } class="mt-8 flex flex-col gap-4">
+    <input type="hidden" name="csrf_token" value={ csrf }/>
+    <input type="hidden" name="next" value={ next }/>
+    <label>Email <input class="block w-full rounded border p-2 text-black" type="email" name="email" required autocomplete="email"/></label>
+    <label>Password <input class="block w-full rounded border p-2 text-black" type="password" name="password" minlength="12" maxlength="128" required autocomplete="new-password"/></label>
+    if recovery {
+     <label>Administrator recovery token <input class="block w-full rounded border p-2 text-black" type="password" name="recovery_token" required/></label>
+    }
+    <button class="rounded bg-primary px-4 py-2 text-primary-foreground" type="submit">{ title }</button>
+   </form>
+   <nav class="mt-6 flex gap-4 text-sm underline"><a href="/auth/login">Log in</a><a href="/auth/register">Register</a><a href="/auth/reset-password">Reset password</a></nav>
+  </main>
+ }
+}
