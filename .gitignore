@@ -10,6 +10,8 @@
 *.db-shm
 *.db-wal
 /node_modules/
+/playwright-report/
+/test-results/
 
 /db/
 /.pnpm-store/

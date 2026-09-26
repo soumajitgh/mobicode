@@ -6,9 +6,11 @@
     "css:build": "tailwindcss -i ./internal/web/styles/app.css -o ./public/css/app.css --minify",
     "css:watch": "tailwindcss -i ./internal/web/styles/app.css -o ./public/css/app.css --watch=always --poll=500",
     "htmx:copy": "node -e \"const fs=require('node:fs'); fs.mkdirSync('public/js',{recursive:true}); fs.copyFileSync('node_modules/htmx.org/dist/htmx.min.js','public/js/htmx.min.js')\"",
-    "build": "pnpm run css:build && pnpm run htmx:copy"
+    "build": "pnpm run css:build && pnpm run htmx:copy",
+    "test:e2e": "playwright test"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "@tailwindcss/cli": "4.3.3",
     "htmx.org": "2.0.11",
     "lefthook": "2.1.14",

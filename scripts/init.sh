@@ -34,6 +34,9 @@ printf 'Downloading Go dependencies...\n'
 printf 'Installing root web dependencies...\n'
 "$pnpm_cmd" install --frozen-lockfile
 
+printf 'Installing Playwright browser...\n'
+"$make_cmd" e2e/install GO="$go_cmd" PNPM="$pnpm_cmd"
+
 if git rev-parse --git-dir >/dev/null 2>&1; then
 	printf 'Installing commit message hook...\n'
 	"$pnpm_cmd" exec lefthook install
