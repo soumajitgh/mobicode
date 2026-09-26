@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"fmt"
 	"net/http"
 	"time"
 
@@ -10,7 +9,7 @@ import (
 )
 
 // Logging records one completion event per HTTP request.
-func Logging(log *zap.Logger, development ...bool) func(http.Handler) http.Handler {
+func Logging(log *zap.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			started := time.Now()
@@ -21,10 +20,6 @@ func Logging(log *zap.Logger, development ...bool) func(http.Handler) http.Handl
 			if status == 0 {
 				status = http.StatusOK
 			}
-			if len(development) > 0 && development[0] {
-				log.Info(fmt.Sprintf("%s %s  %d  %s", r.Method, r.URL.Path, status, time.Since(started).Round(time.Microsecond)))
-				return
-			}
 			fields := []zap.Field{
 				zap.String("method", r.Method),
 				zap.String("path", r.URL.Path),
@@ -34,7 +29,14 @@ func Logging(log *zap.Logger, development ...bool) func(http.Handler) http.Handl
 			if requestID := chimiddleware.GetReqID(r.Context()); requestID != "" {
 				fields = append(fields, zap.String("request_id", requestID))
 			}
-			log.Info("request completed", fields...)
+			switch {
+			case status >= http.StatusInternalServerError:
+				log.Error("request completed", fields...)
+			case status >= http.StatusBadRequest:
+				log.Warn("request completed", fields...)
+			default:
+				log.Info("request completed", fields...)
+			}
 		})
 	}
 }

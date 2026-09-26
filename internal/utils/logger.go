@@ -14,6 +14,7 @@ func New(environment string) (*zap.Logger, error) {
 		config := zap.NewDevelopmentConfig()
 		config.DisableCaller = true
 		config.DisableStacktrace = true
+		config.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
 		config.EncoderConfig.EncodeTime = zapcore.TimeEncoderOfLayout("15:04:05")
 		config.EncoderConfig.ConsoleSeparator = "  "
 		return config.Build()
