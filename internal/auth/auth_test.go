@@ -68,3 +68,52 @@ func TestService(t *testing.T) {
 		t.Fatalf("version: %+v %v", newer, err)
 	}
 }
+
+func TestCreateInitialUser(t *testing.T) {
+	s, err := store.Open(context.Background(), store.Config{SQLitePath: filepath.Join(t.TempDir(), "test-initial.db"), GORMLogLevel: logger.Silent})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = s.Close()
+	})
+	ctx := context.Background()
+	service := Service{Users: s.Users}
+
+	// Count initially 0
+	count, err := s.Users.Count(ctx)
+	if err != nil || count != 0 {
+		t.Fatalf("expected count 0, got %d, err: %v", count, err)
+	}
+
+	// Invalid password / email
+	if _, err := service.CreateInitialUser(ctx, "invalid-email", "validpassword123"); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput, got %v", err)
+	}
+	if _, err := service.CreateInitialUser(ctx, "admin@example.com", "short"); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput, got %v", err)
+	}
+
+	// Valid initial user creation
+	user, err := service.CreateInitialUser(ctx, " Admin@Example.com ", "validpassword123")
+	if err != nil || user.Email != "admin@example.com" {
+		t.Fatalf("expected success, got user: %+v, err: %v", user, err)
+	}
+
+	// Count now 1
+	count, err = s.Users.Count(ctx)
+	if err != nil || count != 1 {
+		t.Fatalf("expected count 1, got %d, err: %v", count, err)
+	}
+
+	// FindFirst
+	first, err := s.Users.FindFirst(ctx)
+	if err != nil || first.Email != "admin@example.com" {
+		t.Fatalf("expected first user admin@example.com, got %+v, err: %v", first, err)
+	}
+
+	// Cannot create initial user again once user exists
+	if _, err := service.CreateInitialUser(ctx, "other@example.com", "validpassword123"); !errors.Is(err, ErrInitialUserAlreadyExists) {
+		t.Fatalf("expected ErrInitialUserAlreadyExists, got %v", err)
+	}
+}

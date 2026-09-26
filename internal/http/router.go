@@ -15,15 +15,17 @@ import (
 	"github.com/soumajitgh/mobicode/internal/http/middleware"
 	"github.com/soumajitgh/mobicode/internal/web"
 	webhandlers "github.com/soumajitgh/mobicode/internal/web/handlers"
+	webmiddleware "github.com/soumajitgh/mobicode/internal/web/middleware"
 )
 
 // NewRouter builds the server's HTTP handler.
-func NewRouter(resolver *appgraphql.Resolver, webHandler *webhandlers.Handler, enablePlayground, devAssets bool, log *zap.Logger, browserAuth *web.Auth) *chi.Mux {
+func NewRouter(resolver *appgraphql.Resolver, webHandler *webhandlers.Handler, enablePlayground, devAssets bool, log *zap.Logger, browserAuth *webhandlers.Auth, onboarding *webhandlers.Onboarding) *chi.Mux {
 	r := chi.NewRouter()
 	middleware.Apply(r, log, os.Getenv("MOBICODE_SERVER_ENV") != "production")
 	r.Use(browserAuth.Sessions.LoadAndSave)
+	r.Use(webmiddleware.GateOnboarding(onboarding))
 	r.Get("/healthz", handler.Health)
-	web.RegisterRoutes(r, webHandler, devAssets, browserAuth)
+	web.RegisterRoutes(r, webHandler, devAssets, browserAuth, onboarding)
 
 	r.Route("/mobile", func(r chi.Router) {
 		graphqlHandler := newGraphQLHandler(resolver)

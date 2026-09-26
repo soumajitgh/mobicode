@@ -67,7 +67,7 @@ func TestBrowserAuth(t *testing.T) {
 		}
 		return string(matches[1])
 	}
-	if res := get("/"); res.StatusCode != 303 || !strings.Contains(res.Header.Get("Location"), "/auth/login?next=") {
+	if res := get("/"); res.StatusCode != 303 || res.Header.Get("Location") != "/onboarding" {
 		t.Fatalf("home: %d %s", res.StatusCode, res.Header.Get("Location"))
 	}
 	for _, path := range []string{"/healthz", "/assets/css/app.css"} {
@@ -77,9 +77,21 @@ func TestBrowserAuth(t *testing.T) {
 		}
 		closeBody(res)
 	}
-	res := post("/auth/register", url.Values{"email": {"a@example.com"}, "password": {"123456789012"}, "recovery_token": {"a-long-recovery-token-of-at-least-32-bytes"}})
+	res := post("/onboarding", url.Values{"email": {"a@example.com"}, "password": {"123456789012"}})
 	if res.StatusCode != 403 {
 		t.Fatalf("CSRF: %d", res.StatusCode)
+	}
+	closeBody(res)
+	csrf := token("/onboarding")
+	res = post("/onboarding", url.Values{"email": {" A@Example.com "}, "password": {"123456789012"}, "csrf_token": {csrf}})
+	if res.StatusCode != 303 || res.Header.Get("Location") != "/onboarding?step=2" {
+		t.Fatalf("onboarding user: %d %s", res.StatusCode, res.Header.Get("Location"))
+	}
+	closeBody(res)
+	csrf = token("/onboarding?step=3")
+	res = post("/onboarding/finish", url.Values{"csrf_token": {csrf}})
+	if res.StatusCode != 303 || res.Header.Get("Location") != "/" {
+		t.Fatalf("onboarding finish: %d %s", res.StatusCode, res.Header.Get("Location"))
 	}
 	closeBody(res)
 	graphqlReq, _ := http.NewRequest(http.MethodPost, "http://mobicode.test/mobile/graphql", bytes.NewBufferString(`{"query":"{ health { status } }"}`))
@@ -89,12 +101,6 @@ func TestBrowserAuth(t *testing.T) {
 		t.Fatalf("public GraphQL: %v %+v", err, graphqlRes)
 	}
 	closeBody(graphqlRes)
-	csrf := token("/auth/register?next=%2Fpartials%2Fstatus")
-	res = post("/auth/register", url.Values{"email": {" A@Example.com "}, "password": {"123456789012"}, "recovery_token": {"a-long-recovery-token-of-at-least-32-bytes"}, "csrf_token": {csrf}, "next": {"//evil.example"}})
-	if res.StatusCode != 303 || res.Header.Get("Location") != "/" {
-		t.Fatalf("register redirect: %d %s", res.StatusCode, res.Header.Get("Location"))
-	}
-	closeBody(res)
 	registerCookie := jar.Cookies(&url.URL{Scheme: "http", Host: "mobicode.test"})[0].Value
 	if res = get("/"); res.StatusCode != 200 {
 		t.Fatalf("authenticated home: %d", res.StatusCode)
@@ -130,8 +136,8 @@ func TestBrowserAuth(t *testing.T) {
 		t.Fatalf("logout: %d", res.StatusCode)
 	}
 	closeBody(res)
-	if res = get("/"); res.StatusCode != 303 {
-		t.Fatalf("after logout: %d", res.StatusCode)
+	if res = get("/"); res.StatusCode != 303 || !strings.Contains(res.Header.Get("Location"), "/auth/login?next=") {
+		t.Fatalf("after logout: %d %s", res.StatusCode, res.Header.Get("Location"))
 	}
 	closeBody(res)
 }

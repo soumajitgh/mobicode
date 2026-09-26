@@ -8,7 +8,6 @@ import (
 	"github.com/alexedwards/scs/v2"
 
 	"github.com/soumajitgh/mobicode/internal/auth"
-	"github.com/soumajitgh/mobicode/internal/web"
 
 	"go.uber.org/zap"
 
@@ -31,7 +30,8 @@ func New(persistence *store.Store, log *zap.Logger) http.Handler {
 	sessions.Cookie.SameSite = http.SameSiteLaxMode
 	sessions.Cookie.Path = "/"
 	sessions.Cookie.Secure = os.Getenv("MOBICODE_SERVER_ENV") == "production"
-	browserAuth := web.NewAuth(&auth.Service{Users: persistence.Users, RecoveryToken: os.Getenv("MOBICODE_SERVER_SECRET_TOKEN")}, sessions, persistence.Users)
+	browserAuth := handlers.NewAuth(&auth.Service{Users: persistence.Users, RecoveryToken: os.Getenv("MOBICODE_SERVER_SECRET_TOKEN")}, sessions, persistence.Users)
+	onboarding := handlers.NewOnboarding(browserAuth, persistence.Users, sessions)
 	webHandler := &handlers.Handler{HealthService: healthService, Sessions: sessions}
 	return apphttp.NewRouter(
 		resolver,
@@ -40,5 +40,6 @@ func New(persistence *store.Store, log *zap.Logger) http.Handler {
 		os.Getenv("MOBICODE_SERVER_DEV_ASSETS") == "true",
 		log,
 		browserAuth,
+		onboarding,
 	)
 }

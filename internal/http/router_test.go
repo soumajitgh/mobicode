@@ -15,7 +15,7 @@ import (
 
 	"github.com/soumajitgh/mobicode/internal/auth"
 	"github.com/soumajitgh/mobicode/internal/store"
-	"github.com/soumajitgh/mobicode/internal/web"
+	"github.com/soumajitgh/mobicode/internal/store/model"
 
 	"go.uber.org/zap"
 
@@ -31,9 +31,11 @@ func testRouter(t *testing.T, enablePlayground bool) http.Handler {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = persistence.Close() })
+	_ = persistence.Users.Create(context.Background(), &model.User{Email: "test@example.com", PasswordHash: "hash123456789", SessionVersion: 1})
 	sessions := scs.New()
 	sessions.Store = persistence.Sessions
-	browserAuth := web.NewAuth(&auth.Service{Users: persistence.Users, RecoveryToken: "a-long-recovery-token-of-at-least-32-bytes"}, sessions, persistence.Users)
+	browserAuth := handlers.NewAuth(&auth.Service{Users: persistence.Users, RecoveryToken: "a-long-recovery-token-of-at-least-32-bytes"}, sessions, persistence.Users)
+	onboarding := handlers.NewOnboarding(browserAuth, persistence.Users, sessions)
 	healthService := &health.Service{}
 	return NewRouter(
 		&appgraphql.Resolver{HealthService: healthService},
@@ -42,6 +44,7 @@ func testRouter(t *testing.T, enablePlayground bool) http.Handler {
 		false,
 		zap.NewNop(),
 		browserAuth,
+		onboarding,
 	)
 }
 
