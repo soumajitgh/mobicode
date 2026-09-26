@@ -2,7 +2,12 @@ import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { z } from 'zod';
 
+import { AppError } from '@/api/errors';
 import { persistSession, type Session } from '@/features/auth/session';
+
+type AutoPairResult = { session: Session | null; error: AppError | null };
+
+const unavailable: AutoPairResult = { session: null, error: null };
 
 const autoPairResponse = z.object({
   accessToken: z.string().min(1),
@@ -41,10 +46,10 @@ function developmentServerURL(): string | null {
   }
 }
 
-export async function autoPairDevelopmentDevice(): Promise<Session | null> {
-  if (!__DEV__) return null;
+export async function autoPairDevelopmentDevice(): Promise<AutoPairResult> {
+  if (!__DEV__) return unavailable;
   const serverBaseURL = developmentServerURL();
-  if (!serverBaseURL) return null;
+  if (!serverBaseURL) return unavailable;
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 5000);
@@ -57,13 +62,25 @@ export async function autoPairDevelopmentDevice(): Promise<Session | null> {
       }),
       signal: controller.signal,
     });
-    if (!response.ok) return null;
+    if (response.status === 503) {
+      const body = await response.text();
+      if (body.includes('server onboarding incomplete')) {
+        return {
+          session: null,
+          error: new AppError(
+            'server_unavailable',
+            'Finish server onboarding in the browser before pairing this device.',
+          ),
+        };
+      }
+    }
+    if (!response.ok) return unavailable;
     const data = autoPairResponse.parse(await response.json());
     const session = { serverBaseURL, ...data };
     await persistSession(session);
-    return session;
+    return { session, error: null };
   } catch {
-    return null;
+    return unavailable;
   } finally {
     clearTimeout(timeout);
   }

@@ -1,4 +1,4 @@
-.PHONY: help init server/dev server/build server/test server/test-race server/test-e2e server/fmt server/check mobile/install mobile/start mobile/android mobile/ios mobile/web mobile/lint mobile/typecheck website/install website/start website/build
+.PHONY: help init server/dev server/seed server/build server/test server/test-race server/test-e2e server/fmt server/check mobile/install mobile/start mobile/android mobile/ios mobile/web mobile/lint mobile/typecheck website/install website/start website/build
 
 GO ?= go
 GOLANGCI_LINT ?= golangci-lint
@@ -12,6 +12,7 @@ help:
 	  '  make init               Set up a fresh clone (Go, web, mobile, website)' \
 	  'Server:' \
 	  '  make server/dev         Run Air with Go, Templ, and CSS reload' \
+	  '  make server/seed        Create the initial development account' \
 	  '  make server/build       Build bin/mobicode-server' \
 	  '  make server/test        Run package and integration tests' \
 	  '  make server/test-race   Run package and integration tests with the race detector' \
@@ -39,6 +40,9 @@ server/dev:
 	@$(PNPM) run css:watch & css_pid=$$!; \
 	trap 'kill $$css_pid 2>/dev/null || true' EXIT INT TERM; \
 	MOBICODE_SERVER_DEV_ASSETS=true MOBICODE_SERVER_PORT=$(SERVER_PORT) $(GO) tool air -proxy.app_port=$(SERVER_PORT) -proxy.proxy_port=$(RELOAD_PORT) -c .air.toml
+
+server/seed:
+	$(GO) run ./cmd/seed
 
 server/build:
 	$(GO) tool templ generate -path internal/web

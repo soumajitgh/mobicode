@@ -25,6 +25,7 @@ import Animated, {
 import { parsePairingPayload } from '@/features/pairing/schemas';
 import { theme } from '@/shared/theme';
 import { usePairingStore } from '@/store/pairing-store';
+import { useSessionStore } from '@/store/session-store';
 
 export function PairingScreen() {
   const { width, height } = useWindowDimensions();
@@ -41,6 +42,7 @@ export function PairingScreen() {
   const submit = usePairingStore((state) => state.submit);
   const busy = usePairingStore((state) => state.busy);
   const pairingError = usePairingStore((state) => state.error);
+  const sessionError = useSessionStore((state) => state.error);
 
   useEffect(() => {
     if (permission?.status === 'undetermined' && !requestedPermission.current) {
@@ -58,7 +60,10 @@ export function PairingScreen() {
 
   const scanning = permission?.granted && !scanned && !busy && !cameraError;
   const issue =
-    scanError ?? pairingError ?? (cameraError ? 'Camera unavailable.' : null);
+    scanError ??
+    pairingError ??
+    sessionError?.message ??
+    (cameraError ? 'Camera unavailable.' : null);
   const waiting = !permission || scanning || (busy && !success);
   const buttonLabel = success
     ? 'Paired'

@@ -31,6 +31,8 @@ Run `make help` to see the daily development commands. The most common are:
 - Browser app: run `make server/dev` after initialization; open `http://localhost:8080/`
 - Browser development: use `make server/dev` and open `http://localhost:7331/` for automatic reloads
 - Mobile: `make mobile/start` (or `make mobile/android`, `make mobile/ios`, `make mobile/web`)
+- Development account: `make server/seed` creates the first user in the configured local database and prints a random password once. Re-running it leaves existing accounts alone. Run it against the same database as the server before using mobile auto-pair.
+- Air uses `tmp/air` for disposable build files so its exit cleanup does not remove the development database under `tmp/database`.
 - Mobile architecture and generated GraphQL types: see [mobile/README.md](mobile/README.md). The app uses Expo Router, urql, and a runtime paired server URL.
 - Website: `make website/start`
 

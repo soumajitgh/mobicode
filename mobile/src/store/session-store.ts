@@ -32,31 +32,34 @@ export const useSessionStore = create<SessionStore>((set) => ({
 
     restorePromise = (async () => {
       set({ status: 'loading', error: null, session: null });
+      let restoredSession: Session | null = null;
+      let restoreError: AppError | null = null;
       try {
-        const session = await restoreSession();
-        const bootSession = session ?? (await autoPairDevelopmentDevice());
-        set(
-          bootSession
-            ? { status: 'authenticated', error: null, session: bootSession }
-            : { status: 'unauthenticated', error: null, session: null },
-        );
+        restoredSession = await restoreSession();
       } catch (error) {
-        const session = await autoPairDevelopmentDevice();
-        if (session) {
-          set({ status: 'authenticated', error: null, session });
-          return;
-        }
-        set({
-          status: 'unauthenticated',
-          error:
-            error instanceof AppError
-              ? error
-              : new AppError(
-                  'server_unavailable',
-                  'Could not restore your session. Try again.',
-                ),
-          session: null,
-        });
+        restoreError =
+          error instanceof AppError
+            ? error
+            : new AppError(
+                'server_unavailable',
+                'Could not restore your session. Try again.',
+              );
+      }
+
+      try {
+        const autoPair = restoredSession
+          ? null
+          : await autoPairDevelopmentDevice();
+        const session = restoredSession ?? autoPair?.session ?? null;
+        set(
+          session
+            ? { status: 'authenticated', error: null, session }
+            : {
+                status: 'unauthenticated',
+                error: autoPair?.error ?? restoreError,
+                session: null,
+              },
+        );
       } finally {
         restorePromise = null;
       }
