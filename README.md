@@ -24,13 +24,19 @@ Use Go 1.26.5, Node.js 22 or newer, and pnpm 11.27.1. From a fresh clone, run `m
 Run `make help` to see the daily development commands. The most common are:
 
 - Server: run `make server/dev` after initialization (listens on `:8080` by default; set `MOBICODE_SERVER_PORT` to change the port; `GET /healthz` returns `ok`)
-- Database: SQLite uses `mobicode.db` and GORM logging defaults to `warn`. Startup runs embedded Goose migrations before serving requests. Add versioned SQL files under `internal/store/migrations` when application schemas are defined. The example repository has no table until a future migration creates one.
+- Database: set `MOBICODE_SERVER_DB_PATH` in `.env` to choose the SQLite file (default `db/mobicode.db`). GORM logging defaults to `warn`. Startup runs embedded Goose migrations before serving requests.
 - GraphQL: send POST requests to `/mobile/graphql`; the playground is disabled by default
 - Schema changes: edit `internal/graphql/schema/*.graphqls`, run `make gql`, then implement the generated resolver using services from `internal/app`
 - Browser app: run `make server/dev` after initialization; open `http://localhost:8080/`
 - Browser development: run `make web/watch` and open `http://localhost:7331/` for reloads (`WEB_PORT=8090` changes the app port)
 - Mobile: `make mobile/start` (or `make mobile/android`, `make mobile/ios`, `make mobile/web`)
 - Website: `make website/start`
+
+## Run with Docker Compose
+
+`compose.yaml` is a development setup. It mounts the source tree, regenerates Templ and shadcn assets, restarts the Go server when files under `internal/web` change, and watches Tailwind CSS. Run `docker compose up --build` to start it. Changes to Templ, browser Go code, and CSS files are picked up automatically; run `docker compose restart server` after changing other Go packages. The server is available at `http://localhost:8080/` or the host port set by `MOBICODE_SERVER_PORT`.
+
+SQLite needs no separate service. Set `MOBICODE_SERVER_DB_PATH` in `.env` (default `db/mobicode.db`); the `db` directory is backed by a named Compose volume so data persists across restarts. For local `make server/dev`, the same path is created in the repository and ignored by Git. Browser registration and password reset require the administrator token from `.env`; `make init` generates one when creating the file.
 
 The documentation site is published from `master` through GitHub Actions at [soumajitgh.github.io/mobicode](https://soumajitgh.github.io/mobicode/).
 
