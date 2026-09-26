@@ -3,6 +3,8 @@
 GO ?= go
 GOLANGCI_LINT ?= golangci-lint
 PNPM ?= pnpm
+SERVER_PORT ?= 8080
+RELOAD_PORT ?= 7331
 
 help:
 	@printf '%s\n' \
@@ -33,7 +35,7 @@ server/dev:
 	$(PNPM) run htmx:copy
 	@$(PNPM) run css:watch & css_pid=$$!; \
 	trap 'kill $$css_pid 2>/dev/null || true' EXIT INT TERM; \
-	MOBICODE_SERVER_DEV_ASSETS=true $(GO) tool air -c .air.toml
+	MOBICODE_SERVER_DEV_ASSETS=true MOBICODE_SERVER_PORT=$(SERVER_PORT) $(GO) tool air -proxy.app_port=$(SERVER_PORT) -proxy.proxy_port=$(RELOAD_PORT) -c .air.toml
 
 server/build:
 	$(GO) tool templ generate -path internal/web

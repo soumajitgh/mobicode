@@ -23,7 +23,7 @@ Use Go 1.26.5, Node.js 22 or newer, and pnpm 11.27.1. From a fresh clone, run `m
 
 Run `make help` to see the daily development commands. The most common are:
 
-- Server: run `make server/dev` after initialization. Air rebuilds on Go and Templ changes, Tailwind watches CSS, and the browser reloads through `http://localhost:7331/`. The API also listens directly on `:8080` (`GET /healthz` returns `ok`).
+- Server: run `make server/dev` after initialization. Air rebuilds on Go and Templ changes, Tailwind watches CSS, and the browser reloads through `http://localhost:7331/`. The API also listens directly on `:8080` (`GET /healthz` returns `ok`). Set `SERVER_PORT` and `RELOAD_PORT` on the make command to use other local ports.
 - Database: set `MOBICODE_SERVER_DB_PATH` in `.env` to choose the SQLite file (default `db/mobicode.db`). GORM logging defaults to `warn`. Startup runs embedded Goose migrations before serving requests.
 - GraphQL: send POST requests to `/mobile/graphql`; the playground is disabled by default
 - Schema changes: edit `internal/graphql/schema/*.graphqls`, run `go tool gqlgen generate`, then implement the generated resolver using services from `internal/app`

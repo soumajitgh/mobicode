@@ -24,7 +24,7 @@ For development with Go, Templ, and Tailwind reload:
 make server/dev
 ```
 
-Air provides the reload proxy at `http://localhost:7331/`. The CSS watcher serves files from disk during development; normal runs embed the compiled assets in the Go binary.
+Air provides the reload proxy at `http://localhost:7331/`. Set `SERVER_PORT` and `RELOAD_PORT` on the make command to use other local ports. The CSS watcher serves files from disk during development; normal runs embed the compiled assets in the Go binary.
 
 ## Add pages and components
 
